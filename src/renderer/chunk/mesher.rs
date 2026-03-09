@@ -282,9 +282,9 @@ fn mesh_chunk_snapshot(
                         let tex_name = face_texture(textures, i);
                         let region = uv_map.get_region(tex_name);
 
-                        if is_side(i) && textures.side_overlay.is_some() {
+                        if let Some(overlay) = textures.side_overlay.filter(|_| is_side(i)) {
                             emit_face(&mut vertices, &mut indices, block_pos, face, region, WHITE);
-                            let overlay_region = uv_map.get_region(textures.side_overlay.unwrap());
+                            let overlay_region = uv_map.get_region(overlay);
                             emit_face(&mut vertices, &mut indices, block_pos, face, overlay_region, tint);
                         } else {
                             let is_tinted_face = !matches!(textures.tint, Tint::None)

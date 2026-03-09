@@ -12,16 +12,11 @@ pub struct GameSettings {
     pub gui_scale: GuiScale,
 }
 
-#[derive(Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Copy, PartialEq, Default, Serialize, Deserialize)]
 pub enum GuiScale {
+    #[default]
     Auto,
     Fixed(u32),
-}
-
-impl Default for GuiScale {
-    fn default() -> Self {
-        Self::Auto
-    }
 }
 
 impl Default for GameSettings {

@@ -1,4 +1,3 @@
-use glam::Vec3;
 use winit::keyboard::KeyCode;
 
 use super::aabb::Aabb;
