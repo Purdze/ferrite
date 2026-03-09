@@ -1,3 +1,4 @@
+pub mod interaction;
 pub mod inventory;
 
 use glam::Vec3;

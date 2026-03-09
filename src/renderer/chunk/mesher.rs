@@ -40,12 +40,13 @@ pub struct ChunkMeshData {
 
 struct Face {
     positions: [[f32; 3]; 4],
+    uvs: [[f32; 2]; 4],
     offset: [i32; 3],
     light: f32,
 }
 
 const FACES: [Face; 6] = [
-    // Top (Y+): viewed from above, CCW
+    // Top (Y+): viewed from above, +X right, -Z up
     Face {
         positions: [
             [0.0, 1.0, 1.0],
@@ -53,10 +54,11 @@ const FACES: [Face; 6] = [
             [1.0, 1.0, 0.0],
             [0.0, 1.0, 0.0],
         ],
+        uvs: [[0.0, 1.0], [1.0, 1.0], [1.0, 0.0], [0.0, 0.0]],
         offset: [0, 1, 0],
         light: 1.0,
     },
-    // Bottom (Y-): viewed from below, CCW
+    // Bottom (Y-): viewed from below, +X right, +Z up
     Face {
         positions: [
             [0.0, 0.0, 0.0],
@@ -64,10 +66,11 @@ const FACES: [Face; 6] = [
             [1.0, 0.0, 1.0],
             [0.0, 0.0, 1.0],
         ],
+        uvs: [[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]],
         offset: [0, -1, 0],
         light: 0.5,
     },
-    // North (Z-): viewed from -Z, CCW
+    // North (Z-): viewed from -Z, +X right, +Y up
     Face {
         positions: [
             [0.0, 0.0, 0.0],
@@ -75,10 +78,11 @@ const FACES: [Face; 6] = [
             [1.0, 1.0, 0.0],
             [1.0, 0.0, 0.0],
         ],
+        uvs: [[0.0, 1.0], [0.0, 0.0], [1.0, 0.0], [1.0, 1.0]],
         offset: [0, 0, -1],
         light: 0.7,
     },
-    // South (Z+): viewed from +Z, CCW
+    // South (Z+): viewed from +Z, +X left, +Y up
     Face {
         positions: [
             [1.0, 0.0, 1.0],
@@ -86,10 +90,11 @@ const FACES: [Face; 6] = [
             [0.0, 1.0, 1.0],
             [0.0, 0.0, 1.0],
         ],
+        uvs: [[1.0, 1.0], [1.0, 0.0], [0.0, 0.0], [0.0, 1.0]],
         offset: [0, 0, 1],
         light: 0.7,
     },
-    // East (X+): viewed from +X, CCW
+    // East (X+): viewed from +X, -Z right, +Y up
     Face {
         positions: [
             [1.0, 0.0, 0.0],
@@ -97,10 +102,11 @@ const FACES: [Face; 6] = [
             [1.0, 1.0, 1.0],
             [1.0, 0.0, 1.0],
         ],
+        uvs: [[1.0, 1.0], [1.0, 0.0], [0.0, 0.0], [0.0, 1.0]],
         offset: [1, 0, 0],
         light: 0.8,
     },
-    // West (X-): viewed from -X, CCW
+    // West (X-): viewed from -X, +Z right, +Y up
     Face {
         positions: [
             [0.0, 0.0, 1.0],
@@ -108,6 +114,7 @@ const FACES: [Face; 6] = [
             [0.0, 1.0, 0.0],
             [0.0, 0.0, 0.0],
         ],
+        uvs: [[1.0, 1.0], [1.0, 0.0], [0.0, 0.0], [0.0, 1.0]],
         offset: [-1, 0, 0],
         light: 0.8,
     },
@@ -292,21 +299,21 @@ fn emit_face(
 ) {
     let base = vertices.len() as u32;
 
-    let uvs = [
-        [region.u_min, region.v_min],
-        [region.u_max, region.v_min],
-        [region.u_max, region.v_max],
-        [region.u_min, region.v_max],
-    ];
+    let u_span = region.u_max - region.u_min;
+    let v_span = region.v_max - region.v_min;
 
     for (i, pos) in face.positions.iter().enumerate() {
+        let uv = face.uvs[i];
         vertices.push(ChunkVertex {
             position: [
                 block_pos[0] + pos[0],
                 block_pos[1] + pos[1],
                 block_pos[2] + pos[2],
             ],
-            tex_coords: uvs[i],
+            tex_coords: [
+                region.u_min + uv[0] * u_span,
+                region.v_min + uv[1] * v_span,
+            ],
             light: face.light,
             tint,
         });

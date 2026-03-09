@@ -13,6 +13,7 @@ use winit::window::{CursorGrabMode, Window, WindowId};
 
 use crate::net::NetworkEvent;
 use crate::physics::movement;
+use crate::player::interaction::InteractionState;
 use crate::player::LocalPlayer;
 use crate::renderer::chunk::mesher::MeshDispatcher;
 use crate::renderer::Renderer;
@@ -51,6 +52,7 @@ struct App {
     last_frame: Option<Instant>,
     net_events: Option<crossbeam_channel::Receiver<NetworkEvent>>,
     chat_sender: Option<crossbeam_channel::Sender<String>>,
+    packet_sender: Option<crate::net::sender::PacketSender>,
     chunk_store: ChunkStore,
     assets_dir: PathBuf,
     asset_index: Option<crate::assets::AssetIndex>,
@@ -68,6 +70,7 @@ struct App {
     inventory_open: bool,
     chat: ChatState,
     panorama_scroll: f32,
+    interaction: InteractionState,
 }
 
 impl App {
@@ -77,9 +80,13 @@ impl App {
         game_dir: PathBuf,
         tokio_rt: Arc<tokio::runtime::Runtime>,
     ) -> Self {
-        let (net_events, chat_sender) = match connection {
-            Some(handle) => (Some(handle.events), Some(handle.chat_tx)),
-            None => (None, None),
+        let (net_events, chat_sender, packet_sender) = match connection {
+            Some(handle) => (
+                Some(handle.events),
+                Some(handle.chat_tx),
+                Some(crate::net::sender::PacketSender::new(handle.packet_tx)),
+            ),
+            None => (None, None, None),
         };
         let state = if net_events.is_some() {
             GameState::InGame
@@ -94,6 +101,7 @@ impl App {
             last_frame: None,
             net_events,
             chat_sender,
+            packet_sender,
             chunk_store: ChunkStore::new(VIEW_DISTANCE),
             asset_index: crate::assets::AssetIndex::load(&game_dir),
             assets_dir,
@@ -111,6 +119,7 @@ impl App {
             inventory_open: false,
             chat: ChatState::new(),
             panorama_scroll: 0.0,
+            interaction: InteractionState::new(),
         }
     }
 
@@ -122,7 +131,8 @@ impl App {
             && !self.chat.is_open()
             && self.input.is_cursor_captured();
         if captured {
-            let _ = window.set_cursor_grab(CursorGrabMode::Confined);
+            let _ = window.set_cursor_grab(CursorGrabMode::Locked)
+                .or_else(|_| window.set_cursor_grab(CursorGrabMode::Confined));
             window.set_cursor_visible(false);
         } else {
             let _ = window.set_cursor_grab(CursorGrabMode::None);
@@ -141,6 +151,7 @@ impl App {
         let handle = crate::net::connection::spawn_connection(&self.tokio_rt, connect_args);
         self.net_events = Some(handle.events);
         self.chat_sender = Some(handle.chat_tx);
+        self.packet_sender = Some(crate::net::sender::PacketSender::new(handle.packet_tx));
         self.state = GameState::InGame;
         self.apply_cursor_grab();
     }
@@ -214,6 +225,24 @@ impl App {
                 }
                 NetworkEvent::ChatMessage { text } => {
                     self.chat.push_message(text);
+                }
+                NetworkEvent::BlockUpdate { pos, state } => {
+                    self.chunk_store.set_block_state(pos.x, pos.y, pos.z, state);
+                    let chunk_pos = azalea_core::position::ChunkPos::new(
+                        pos.x.div_euclid(16), pos.z.div_euclid(16),
+                    );
+                    chunks_to_mesh.push(chunk_pos);
+                }
+                NetworkEvent::SectionBlocksUpdate { updates } => {
+                    for (pos, state) in updates {
+                        self.chunk_store.set_block_state(pos.x, pos.y, pos.z, state);
+                        let chunk_pos = azalea_core::position::ChunkPos::new(
+                            pos.x.div_euclid(16), pos.z.div_euclid(16),
+                        );
+                        if !chunks_to_mesh.contains(&chunk_pos) {
+                            chunks_to_mesh.push(chunk_pos);
+                        }
+                    }
                 }
                 NetworkEvent::Disconnected { reason } => {
                     log::warn!("Disconnected: {reason}");
@@ -361,6 +390,15 @@ impl ApplicationHandler for App {
                     self.input.on_scroll(scroll);
                 }
             }
+            WindowEvent::MouseInput { state, button, .. } => {
+                if matches!(self.state, GameState::InGame)
+                    && self.input.is_cursor_captured()
+                    && !self.paused
+                    && !self.inventory_open
+                {
+                    self.input.on_mouse_button(button, state);
+                }
+            }
             WindowEvent::RedrawRequested => {
                 let now = Instant::now();
                 let dt = self
@@ -427,6 +465,26 @@ impl ApplicationHandler for App {
                         let interp_pos = self.prev_player_pos.lerp(self.player.position, alpha);
                         let eye_pos = interp_pos + glam::Vec3::new(0.0, 1.62, 0.0);
 
+                        if !self.paused && !self.inventory_open {
+                            let (yaw, pitch) = if let Some(r) = &self.renderer {
+                                (r.camera_yaw(), r.camera_pitch())
+                            } else {
+                                (self.player.yaw, self.player.pitch)
+                            };
+                            self.interaction.update_target(eye_pos, yaw, pitch, &self.chunk_store);
+                            let dirty = self.interaction.tick(
+                                &self.input,
+                                &self.chunk_store,
+                                self.packet_sender.as_ref(),
+                            );
+                            if let Some(dispatcher) = &self.mesh_dispatcher {
+                                for pos in dirty {
+                                    dispatcher.enqueue(&self.chunk_store, pos);
+                                }
+                            }
+                            self.input.clear_click_events();
+                        }
+
                         let paused = self.paused;
                         if let (Some(renderer), Some(window)) = (&mut self.renderer, &self.window) {
                             renderer.sync_camera_to_player(
@@ -442,11 +500,12 @@ impl ApplicationHandler for App {
                             let inv_textures = &self.inventory_textures;
                             let inv_open = self.inventory_open;
                             let player_inv = &self.player.inventory;
+                            let hide_cursor = !paused && !inv_open && !self.chat.is_open() && self.input.is_cursor_captured();
                             let chat = &mut self.chat;
                             let mut pause_action = PauseAction::None;
                             let mut chat_msg = None;
                             let mut close_inventory = false;
-                            if let Err(e) = renderer.render_world(window, |ctx| {
+                            if let Err(e) = renderer.render_world(window, hide_cursor, |ctx| {
                                 let screen = ctx.screen_rect();
                                 if let Some(textures) = hud_textures {
                                     hud::draw_hud(ctx, textures, selected_slot, health, food);

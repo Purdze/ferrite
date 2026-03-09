@@ -183,9 +183,10 @@ impl Renderer {
     pub fn render_world(
         &mut self,
         window: &Window,
+        hide_cursor: bool,
         hud_fn: impl FnMut(&egui::Context),
     ) -> Result<(), RendererError> {
-        let prepared = self.prepare_egui(window, hud_fn);
+        let prepared = self.prepare_egui(window, hide_cursor, hud_fn);
         let output = self.ctx.surface.get_current_texture()?;
         let view = output
             .texture
@@ -241,7 +242,7 @@ impl Renderer {
         scroll: f32,
         ui_fn: impl FnMut(&egui::Context),
     ) -> Result<(), RendererError> {
-        let prepared = self.prepare_egui(window, ui_fn);
+        let prepared = self.prepare_egui(window, false, ui_fn);
         let output = self.ctx.surface.get_current_texture()?;
         let view = output
             .texture
@@ -292,6 +293,7 @@ impl Renderer {
     fn prepare_egui(
         &mut self,
         window: &Window,
+        hide_cursor: bool,
         ui_fn: impl FnMut(&egui::Context),
     ) -> PreparedEgui {
         let raw_input = self.egui_state.take_egui_input(window);
@@ -299,6 +301,10 @@ impl Renderer {
 
         self.egui_state
             .handle_platform_output(window, full_output.platform_output);
+
+        if hide_cursor {
+            window.set_cursor_visible(false);
+        }
 
         let tris = self
             .egui_ctx

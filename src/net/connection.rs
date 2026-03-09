@@ -53,6 +53,7 @@ pub struct ConnectArgs {
 pub struct ConnectionHandle {
     pub events: crossbeam_channel::Receiver<NetworkEvent>,
     pub chat_tx: crossbeam_channel::Sender<String>,
+    pub packet_tx: mpsc::UnboundedSender<ServerboundGamePacket>,
 }
 
 pub fn spawn_connection(
@@ -61,8 +62,10 @@ pub fn spawn_connection(
 ) -> ConnectionHandle {
     let (event_tx, event_rx) = crossbeam_channel::bounded(256);
     let (chat_tx, chat_rx) = crossbeam_channel::bounded::<String>(64);
+    let (packet_tx, packet_rx) = mpsc::unbounded_channel::<ServerboundGamePacket>();
+    let game_packet_tx = packet_tx.clone();
     rt.spawn(async move {
-        if let Err(e) = connect_to_server(args, event_tx.clone(), chat_rx).await {
+        if let Err(e) = connect_to_server(args, event_tx.clone(), chat_rx, game_packet_tx, packet_rx).await {
             log::error!("Network error: {e}");
             let _ = event_tx.try_send(NetworkEvent::Disconnected {
                 reason: e.to_string(),
@@ -72,6 +75,7 @@ pub fn spawn_connection(
     ConnectionHandle {
         events: event_rx,
         chat_tx,
+        packet_tx,
     }
 }
 
@@ -79,6 +83,8 @@ pub async fn connect_to_server(
     args: ConnectArgs,
     event_tx: Sender<NetworkEvent>,
     chat_rx: crossbeam_channel::Receiver<String>,
+    game_packet_tx: mpsc::UnboundedSender<ServerboundGamePacket>,
+    game_packet_rx: mpsc::UnboundedReceiver<ServerboundGamePacket>,
 ) -> Result<(), ConnectionError> {
     let addr = resolve_address(&args.server)?;
     log::info!("Connecting to {addr}...");
@@ -115,7 +121,7 @@ pub async fn connect_to_server(
     log::info!("Entering game state");
     let _ = event_tx.try_send(NetworkEvent::Connected);
 
-    game_loop(conn, &event_tx, chat_rx).await
+    game_loop(conn, &event_tx, chat_rx, game_packet_tx, game_packet_rx).await
 }
 
 async fn login_sequence(
@@ -280,13 +286,14 @@ async fn game_loop(
     conn: Connection<ClientboundGamePacket, ServerboundGamePacket>,
     event_tx: &Sender<NetworkEvent>,
     chat_rx: crossbeam_channel::Receiver<String>,
+    outbound_tx: mpsc::UnboundedSender<ServerboundGamePacket>,
+    mut outbound_rx: mpsc::UnboundedReceiver<ServerboundGamePacket>,
 ) -> Result<(), ConnectionError> {
     let (mut reader, mut writer): (
         ReadConnection<ClientboundGamePacket>,
         WriteConnection<ServerboundGamePacket>,
     ) = conn.into_split();
 
-    let (outbound_tx, mut outbound_rx) = mpsc::unbounded_channel::<ServerboundGamePacket>();
     let sender = PacketSender::new(outbound_tx.clone());
 
     tokio::spawn(async move {

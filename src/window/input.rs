@@ -1,5 +1,5 @@
 use std::collections::HashSet;
-use winit::event::ElementState;
+use winit::event::{ElementState, MouseButton};
 use winit::keyboard::{KeyCode, PhysicalKey};
 
 pub struct InputState {
@@ -7,6 +7,15 @@ pub struct InputState {
     mouse_delta: (f64, f64),
     cursor_captured: bool,
     selected_slot: u8,
+    left_click: ClickState,
+    right_click: ClickState,
+}
+
+#[derive(Default)]
+pub struct ClickState {
+    held: bool,
+    just_pressed: bool,
+    just_released: bool,
 }
 
 impl InputState {
@@ -16,6 +25,8 @@ impl InputState {
             mouse_delta: (0.0, 0.0),
             cursor_captured: true,
             selected_slot: 0,
+            left_click: ClickState::default(),
+            right_click: ClickState::default(),
         }
     }
 
@@ -45,9 +56,9 @@ impl InputState {
 
     pub fn on_scroll(&mut self, delta: f32) {
         if delta > 0.0 {
-            self.selected_slot = (self.selected_slot + 1) % 9;
-        } else if delta < 0.0 {
             self.selected_slot = (self.selected_slot + 8) % 9;
+        } else if delta < 0.0 {
+            self.selected_slot = (self.selected_slot + 1) % 9;
         }
     }
 
@@ -60,6 +71,43 @@ impl InputState {
         let delta = self.mouse_delta;
         self.mouse_delta = (0.0, 0.0);
         delta
+    }
+
+    pub fn on_mouse_button(&mut self, button: MouseButton, state: ElementState) {
+        let click = match button {
+            MouseButton::Left => &mut self.left_click,
+            MouseButton::Right => &mut self.right_click,
+            _ => return,
+        };
+        match state {
+            ElementState::Pressed => {
+                click.held = true;
+                click.just_pressed = true;
+            }
+            ElementState::Released => {
+                click.held = false;
+                click.just_released = true;
+            }
+        }
+    }
+
+    pub fn left_just_pressed(&self) -> bool {
+        self.left_click.just_pressed
+    }
+
+    pub fn left_held(&self) -> bool {
+        self.left_click.held
+    }
+
+    pub fn right_just_pressed(&self) -> bool {
+        self.right_click.just_pressed
+    }
+
+    pub fn clear_click_events(&mut self) {
+        self.left_click.just_pressed = false;
+        self.left_click.just_released = false;
+        self.right_click.just_pressed = false;
+        self.right_click.just_released = false;
     }
 
     pub fn is_cursor_captured(&self) -> bool {

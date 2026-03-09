@@ -4,7 +4,8 @@ pub mod sender;
 
 use std::sync::Arc;
 
-use azalea_core::position::ChunkPos;
+use azalea_block::BlockState;
+use azalea_core::position::{BlockPos, ChunkPos};
 use azalea_inventory::ItemStack;
 use azalea_world::heightmap::HeightmapKind;
 
@@ -43,6 +44,13 @@ pub enum NetworkEvent {
     },
     ChatMessage {
         text: String,
+    },
+    BlockUpdate {
+        pos: BlockPos,
+        state: BlockState,
+    },
+    SectionBlocksUpdate {
+        updates: Vec<(BlockPos, BlockState)>,
     },
     Disconnected {
         reason: String,
