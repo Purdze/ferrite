@@ -1,3 +1,4 @@
+use std::path::Path;
 use std::sync::{Arc, Mutex};
 
 use ash::vk;
@@ -11,9 +12,20 @@ pub fn create_gpu_image(
     height: u32,
     name: &str,
 ) -> (vk::Image, vk::ImageView, Allocation) {
+    create_gpu_image_with_format(device, allocator, width, height, vk::Format::R8G8B8A8_SRGB, name)
+}
+
+pub fn create_gpu_image_with_format(
+    device: &ash::Device,
+    allocator: &Arc<Mutex<Allocator>>,
+    width: u32,
+    height: u32,
+    format: vk::Format,
+    name: &str,
+) -> (vk::Image, vk::ImageView, Allocation) {
     let image_info = vk::ImageCreateInfo::default()
         .image_type(vk::ImageType::TYPE_2D)
-        .format(vk::Format::R8G8B8A8_SRGB)
+        .format(format)
         .extent(vk::Extent3D { width, height, depth: 1 })
         .mip_levels(1)
         .array_layers(1)
@@ -46,7 +58,7 @@ pub fn create_gpu_image(
     let view_info = vk::ImageViewCreateInfo::default()
         .image(image)
         .view_type(vk::ImageViewType::TYPE_2D)
-        .format(vk::Format::R8G8B8A8_SRGB)
+        .format(format)
         .subresource_range(COLOR_SUBRESOURCE_RANGE);
     let view = unsafe { device.create_image_view(&view_info, None) }
         .expect("failed to create image view");
@@ -54,19 +66,20 @@ pub fn create_gpu_image(
     (image, view, allocation)
 }
 
-pub fn create_staging_buffer(
+pub fn create_mapped_buffer(
     device: &ash::Device,
     allocator: &Arc<Mutex<Allocator>>,
     data: &[u8],
+    usage: vk::BufferUsageFlags,
     name: &str,
 ) -> (vk::Buffer, Allocation) {
     let buffer_info = vk::BufferCreateInfo::default()
         .size(data.len() as u64)
-        .usage(vk::BufferUsageFlags::TRANSFER_SRC)
+        .usage(usage)
         .sharing_mode(vk::SharingMode::EXCLUSIVE);
 
     let buffer = unsafe { device.create_buffer(&buffer_info, None) }
-        .expect("failed to create staging buffer");
+        .expect("failed to create buffer");
     let mem_reqs = unsafe { device.get_buffer_memory_requirements(buffer) };
 
     let mut allocation = allocator
@@ -79,17 +92,72 @@ pub fn create_staging_buffer(
             linear: true,
             allocation_scheme: AllocationScheme::GpuAllocatorManaged,
         })
-        .expect("failed to allocate staging memory");
+        .expect("failed to allocate buffer memory");
 
     unsafe {
         device
             .bind_buffer_memory(buffer, allocation.memory(), allocation.offset())
-            .expect("failed to bind staging memory");
+            .expect("failed to bind buffer memory");
     }
 
     allocation.mapped_slice_mut().unwrap()[..data.len()].copy_from_slice(data);
 
     (buffer, allocation)
+}
+
+pub fn create_staging_buffer(
+    device: &ash::Device,
+    allocator: &Arc<Mutex<Allocator>>,
+    data: &[u8],
+    name: &str,
+) -> (vk::Buffer, Allocation) {
+    create_mapped_buffer(device, allocator, data, vk::BufferUsageFlags::TRANSFER_SRC, name)
+}
+
+pub fn create_host_buffer(
+    device: &ash::Device,
+    allocator: &Arc<Mutex<Allocator>>,
+    size: u64,
+    usage: vk::BufferUsageFlags,
+    name: &str,
+) -> (vk::Buffer, Allocation) {
+    let buffer_info = vk::BufferCreateInfo::default()
+        .size(size)
+        .usage(usage)
+        .sharing_mode(vk::SharingMode::EXCLUSIVE);
+
+    let buffer = unsafe { device.create_buffer(&buffer_info, None) }
+        .expect("failed to create buffer");
+    let mem_reqs = unsafe { device.get_buffer_memory_requirements(buffer) };
+
+    let allocation = allocator
+        .lock()
+        .unwrap()
+        .allocate(&AllocationCreateDesc {
+            name,
+            requirements: mem_reqs,
+            location: MemoryLocation::CpuToGpu,
+            linear: true,
+            allocation_scheme: AllocationScheme::GpuAllocatorManaged,
+        })
+        .expect("failed to allocate buffer memory");
+
+    unsafe {
+        device
+            .bind_buffer_memory(buffer, allocation.memory(), allocation.offset())
+            .expect("failed to bind buffer memory");
+    }
+
+    (buffer, allocation)
+}
+
+pub fn create_uniform_buffer(
+    device: &ash::Device,
+    allocator: &Arc<Mutex<Allocator>>,
+    size: u64,
+    name: &str,
+) -> (vk::Buffer, Allocation) {
+    create_host_buffer(device, allocator, size, vk::BufferUsageFlags::UNIFORM_BUFFER, name)
 }
 
 pub fn upload_image(
@@ -203,6 +271,50 @@ pub fn create_descriptor_set_layout(
     let info = vk::DescriptorSetLayoutCreateInfo::default().bindings(&bindings);
     unsafe { device.create_descriptor_set_layout(&info, None) }
         .expect("failed to create descriptor set layout")
+}
+
+pub fn load_png(path: &Path) -> Option<(Vec<u8>, u32, u32)> {
+    let file = std::fs::File::open(path).ok()?;
+    let mut decoder = png::Decoder::new(file);
+    decoder.set_transformations(png::Transformations::EXPAND | png::Transformations::STRIP_16);
+    let mut reader = decoder.read_info().ok()?;
+    let mut buf = vec![0u8; reader.output_buffer_size()];
+    let info = reader.next_frame(&mut buf).ok()?;
+
+    let data = match info.color_type {
+        png::ColorType::Rgba => buf[..info.buffer_size()].to_vec(),
+        png::ColorType::Rgb => {
+            let pixels = info.width as usize * info.height as usize;
+            let mut rgba = Vec::with_capacity(pixels * 4);
+            for chunk in buf[..pixels * 3].chunks_exact(3) {
+                rgba.extend_from_slice(chunk);
+                rgba.push(255);
+            }
+            rgba
+        }
+        png::ColorType::GrayscaleAlpha => {
+            let pixels = info.width as usize * info.height as usize;
+            let mut rgba = Vec::with_capacity(pixels * 4);
+            for chunk in buf[..pixels * 2].chunks_exact(2) {
+                rgba.extend_from_slice(&[chunk[0], chunk[0], chunk[0], chunk[1]]);
+            }
+            rgba
+        }
+        png::ColorType::Grayscale => {
+            let pixels = info.width as usize * info.height as usize;
+            let mut rgba = Vec::with_capacity(pixels * 4);
+            for &g in &buf[..pixels] {
+                rgba.extend_from_slice(&[g, g, g, 255]);
+            }
+            rgba
+        }
+        other => {
+            log::warn!("Unsupported PNG color type {other:?}: {}", path.display());
+            return None;
+        }
+    };
+
+    Some((data, info.width, info.height))
 }
 
 const COLOR_SUBRESOURCE_RANGE: vk::ImageSubresourceRange = vk::ImageSubresourceRange {

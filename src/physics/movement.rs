@@ -15,15 +15,12 @@ const GROUND_FRICTION: f32 = BLOCK_FRICTION * HORIZONTAL_DRAG;
 const GROUND_ACCEL_FACTOR: f32 = 0.216;
 const MOVEMENT_SPEED: f32 = 0.1;
 const AIR_ACCELERATION: f32 = 0.02;
-const INPUT_FRICTION: f32 = 0.98;
+const STEP_HEIGHT: f32 = 0.6;
 const PLAYER_HALF_WIDTH: f32 = 0.3;
 const PLAYER_HEIGHT: f32 = 1.8;
 
 pub fn tick(player: &mut LocalPlayer, input: &InputState, chunk_store: &ChunkStore) {
-    let (mut forward, mut strafe) = movement_input(input);
-
-    forward *= INPUT_FRICTION;
-    strafe *= INPUT_FRICTION;
+    let (forward, strafe) = movement_input(input);
 
     if player.on_ground && input.key_pressed(KeyCode::Space) {
         player.velocity.y = JUMP_VELOCITY;
@@ -41,7 +38,8 @@ pub fn tick(player: &mut LocalPlayer, input: &InputState, chunk_store: &ChunkSto
     player.velocity.z += (forward * -cos_yaw + strafe * -sin_yaw) * accel;
 
     let aabb = Aabb::from_center(player.position, PLAYER_HALF_WIDTH, PLAYER_HEIGHT / 2.0);
-    let (resolved, on_ground) = resolve_collision(chunk_store, aabb, player.velocity);
+    let step_height = if player.on_ground { STEP_HEIGHT } else { 0.0 };
+    let (resolved, on_ground) = resolve_collision(chunk_store, aabb, player.velocity, step_height);
 
     player.position += resolved;
     player.on_ground = on_ground;

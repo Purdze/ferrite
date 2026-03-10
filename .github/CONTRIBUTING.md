@@ -1,14 +1,14 @@
-# Contributing to Ferrite
+# Contributing to POMC
 
-Thanks for your interest in contributing to Ferrite!
+Thanks for your interest in contributing to POMC!
 
 ## Getting Started
 
 1. Fork the repository
 2. Clone your fork and set up the development environment:
    ```bash
-   git clone https://github.com/<your-username>/ferrite.git
-   cd ferrite
+   git clone https://github.com/<your-username>/POMC.git
+   cd POMC
    rustup override set nightly
    ```
 3. Extract vanilla 1.21.11 assets into `reference/assets/`:
@@ -26,9 +26,9 @@ Thanks for your interest in contributing to Ferrite!
 - **Rust nightly** is required (due to `simdnbt` dependency)
 - Run `cargo clippy` before submitting a PR
 - Run `cargo fmt` to format your code
-- No `unwrap()` outside of tests  - use `thiserror` for error types
+- No `unwrap()` outside of tests — use `thiserror` for error types
 - Comments explain **why**, not **what**
-- Keep changes focused  - one feature or fix per PR
+- Keep changes focused — one feature or fix per PR
 
 ## Project Structure
 
@@ -37,10 +37,12 @@ src/
 ├── main.rs          # Entry point
 ├── args.rs          # CLI arguments
 ├── window/          # winit event loop, input handling
-├── renderer/        # wgpu rendering, chunk meshing, texture atlas
+├── renderer/        # Vulkan rendering, chunk meshing, texture atlas
 ├── net/             # Server connection, packet handling
 ├── world/           # Chunk storage, block registry
-└── physics/         # (coming soon) Movement, collision
+├── physics/         # Movement, collision
+├── player/          # Local player, inventory, interaction
+└── ui/              # HUD, chat, menus
 ```
 
 ## Pull Requests

@@ -1,135 +1,162 @@
-use std::path::Path;
-
 use azalea_inventory::ItemStack;
-use egui::{Color32, Pos2, Rect, TextureHandle, Vec2};
 
-use crate::player::inventory::{item_display_name, Inventory};
-use crate::ui::hud::{gui_scale, load_texture, NEAREST_FILTER, UV_FULL};
+use crate::player::inventory::{item_resource_name, Inventory};
+use crate::renderer::pipelines::menu_overlay::{MenuElement, SpriteId};
+use super::common::{self, WHITE};
 
-const SLOT_SIZE: f32 = 18.0;
 const INV_TEX_W: f32 = 176.0;
 const INV_TEX_H: f32 = 166.0;
+const SLOT_STRIDE: f32 = 18.0;
+const SLOT_SIZE: f32 = 16.0;
+const LABEL_COLOR: [f32; 4] = [0.25, 0.25, 0.25, 1.0];
+const COUNT_COLOR: [f32; 4] = [1.0, 1.0, 1.0, 1.0];
+const HIGHLIGHT_COLOR: [f32; 4] = [1.0, 1.0, 1.0, 0.5];
 
-const HOTBAR_OFFSET: (f32, f32) = (7.0, 141.0);
-const MAIN_OFFSET: (f32, f32) = (7.0, 83.0);
-const ARMOR_OFFSET: (f32, f32) = (7.0, 7.0);
-const OFFHAND_OFFSET: (f32, f32) = (76.0, 61.0);
-const CRAFT_INPUT_OFFSET: (f32, f32) = (97.0, 17.0);
-const CRAFT_OUTPUT_OFFSET: (f32, f32) = (153.0, 27.0);
-
-pub struct InventoryTextures {
-    background: TextureHandle,
+struct SlotPos {
+    x: f32,
+    y: f32,
 }
 
-impl InventoryTextures {
-    pub fn load(ctx: &egui::Context, assets_dir: &Path) -> Self {
-        let container_dir = assets_dir.join("assets/minecraft/textures/gui/container");
-        Self {
-            background: load_texture(
-                ctx,
-                &container_dir.join("inventory.png"),
-                "inventory_bg",
-                NEAREST_FILTER,
-            ),
-        }
-    }
-}
+const ARMOR_EMPTY_SPRITES: [SpriteId; 4] = [
+    SpriteId::EmptyHelmet,
+    SpriteId::EmptyChestplate,
+    SpriteId::EmptyLeggings,
+    SpriteId::EmptyBoots,
+];
 
-pub fn draw_inventory(
-    ctx: &egui::Context,
-    textures: &InventoryTextures,
+pub fn build_inventory(
+    elements: &mut Vec<MenuElement>,
+    screen_w: f32,
+    screen_h: f32,
+    cursor: (f32, f32),
+    clicked: bool,
     inventory: &Inventory,
+    gs: f32,
 ) -> bool {
-    let mut close = false;
-    let screen = ctx.screen_rect();
-    let scale = gui_scale(ctx)
-        .min(screen.width() / INV_TEX_W)
-        .min(screen.height() / INV_TEX_H);
+    let scale = gs
+        .min(screen_w / INV_TEX_W)
+        .min(screen_h / INV_TEX_H);
     let inv_w = INV_TEX_W * scale;
     let inv_h = INV_TEX_H * scale;
-    let origin = Pos2::new(
-        (screen.width() - inv_w) / 2.0,
-        (screen.height() - inv_h) / 2.0,
-    );
+    let ox = (screen_w - inv_w) / 2.0;
+    let oy = (screen_h - inv_h) / 2.0;
 
-    egui::Area::new(egui::Id::new("inventory_overlay"))
-        .fixed_pos(Pos2::ZERO)
-        .interactable(true)
-        .order(egui::Order::Middle)
-        .show(ctx, |ui| {
-            ui.set_clip_rect(screen);
-            let painter = ui.painter();
-            painter.rect_filled(screen, 0.0, Color32::from_black_alpha(128));
+    common::push_overlay(elements, screen_w, screen_h, 0.5);
 
-            let bg_rect = Rect::from_min_size(origin, Vec2::new(inv_w, inv_h));
-            painter.image(textures.background.id(), bg_rect, UV_FULL, Color32::WHITE);
+    elements.push(MenuElement::Image {
+        x: ox, y: oy, w: inv_w, h: inv_h,
+        sprite: SpriteId::InventoryBackground,
+        tint: WHITE,
+    });
 
-            draw_slot_grid(ui, origin, scale, HOTBAR_OFFSET, 9, 1, inventory.hotbar_slots());
-            draw_slot_grid(ui, origin, scale, MAIN_OFFSET, 9, 3, inventory.main_slots());
-            draw_slot_grid(ui, origin, scale, ARMOR_OFFSET, 1, 4, inventory.armor_slots());
-            draw_slot_grid(ui, origin, scale, CRAFT_INPUT_OFFSET, 2, 2, inventory.craft_input_slots());
-            draw_single_slot(ui, origin, scale, OFFHAND_OFFSET, inventory.offhand());
-            draw_single_slot(ui, origin, scale, CRAFT_OUTPUT_OFFSET, inventory.craft_output());
+    let fs = 6.0 * scale;
 
-            let bg_response = ui.allocate_rect(screen, egui::Sense::click());
-            if bg_response.clicked_elsewhere() {
-                close = true;
-            }
-        });
+    elements.push(MenuElement::Text {
+        x: ox + 97.0 * scale, y: oy + 6.0 * scale,
+        text: "Crafting".into(), scale: fs,
+        color: LABEL_COLOR, centered: false,
+    });
+    elements.push(MenuElement::Text {
+        x: ox + 8.0 * scale, y: oy + 72.0 * scale,
+        text: "Inventory".into(), scale: fs,
+        color: LABEL_COLOR, centered: false,
+    });
 
-    close
-}
+    let hotbar = inventory.hotbar_slots();
+    for col in 0..9usize {
+        let slot = SlotPos { x: 8.0 + col as f32 * SLOT_STRIDE, y: 142.0 };
+        build_slot(elements, ox, oy, scale, fs, &slot, cursor,
+            hotbar.get(col).unwrap_or(&ItemStack::Empty), None);
+    }
 
-fn draw_slot_grid(
-    ui: &egui::Ui,
-    origin: Pos2,
-    scale: f32,
-    offset: (f32, f32),
-    cols: usize,
-    rows: usize,
-    items: &[ItemStack],
-) {
-    for row in 0..rows {
-        for col in 0..cols {
-            let idx = row * cols + col;
-            let item = items.get(idx).unwrap_or(&ItemStack::Empty);
-            let x = origin.x + (offset.0 + col as f32 * SLOT_SIZE + 1.0) * scale;
-            let y = origin.y + (offset.1 + row as f32 * SLOT_SIZE + 1.0) * scale;
-            draw_item(ui, Pos2::new(x, y), scale, item);
+    let main = inventory.main_slots();
+    for row in 0..3usize {
+        for col in 0..9usize {
+            let idx = row * 9 + col;
+            let slot = SlotPos { x: 8.0 + col as f32 * SLOT_STRIDE, y: 84.0 + row as f32 * SLOT_STRIDE };
+            build_slot(elements, ox, oy, scale, fs, &slot, cursor,
+                main.get(idx).unwrap_or(&ItemStack::Empty), None);
         }
     }
+
+    let armor = inventory.armor_slots();
+    let armor_ys = [8.0, 26.0, 44.0, 62.0];
+    for i in 0..4usize {
+        let slot = SlotPos { x: 8.0, y: armor_ys[i] };
+        build_slot(elements, ox, oy, scale, fs, &slot, cursor,
+            armor.get(i).unwrap_or(&ItemStack::Empty),
+            Some(ARMOR_EMPTY_SPRITES[i]));
+    }
+
+    let craft_in = inventory.craft_input_slots();
+    for row in 0..2usize {
+        for col in 0..2usize {
+            let idx = row * 2 + col;
+            let slot = SlotPos { x: 98.0 + col as f32 * SLOT_STRIDE, y: 18.0 + row as f32 * SLOT_STRIDE };
+            build_slot(elements, ox, oy, scale, fs, &slot, cursor,
+                craft_in.get(idx).unwrap_or(&ItemStack::Empty), None);
+        }
+    }
+
+    let craft_out_slot = SlotPos { x: 154.0, y: 28.0 };
+    build_slot(elements, ox, oy, scale, fs, &craft_out_slot, cursor,
+        inventory.craft_output(), None);
+
+    let offhand_slot = SlotPos { x: 77.0, y: 62.0 };
+    build_slot(elements, ox, oy, scale, fs, &offhand_slot, cursor,
+        inventory.offhand(), Some(SpriteId::EmptyShield));
+
+    let outside = cursor.0 < ox || cursor.0 > ox + inv_w || cursor.1 < oy || cursor.1 > oy + inv_h;
+    clicked && outside
 }
 
-fn draw_single_slot(ui: &egui::Ui, origin: Pos2, scale: f32, offset: (f32, f32), item: &ItemStack) {
-    let x = origin.x + (offset.0 + 1.0) * scale;
-    let y = origin.y + (offset.1 + 1.0) * scale;
-    draw_item(ui, Pos2::new(x, y), scale, item);
-}
+fn build_slot(
+    elements: &mut Vec<MenuElement>,
+    ox: f32, oy: f32, scale: f32, fs: f32,
+    slot: &SlotPos,
+    cursor: (f32, f32),
+    item: &ItemStack,
+    empty_sprite: Option<SpriteId>,
+) {
+    let x = ox + slot.x * scale;
+    let y = oy + slot.y * scale;
+    let size = SLOT_SIZE * scale;
 
-fn draw_item(ui: &egui::Ui, pos: Pos2, scale: f32, item: &ItemStack) {
-    let ItemStack::Present(data) = item else {
-        return;
-    };
+    let hovered = cursor.0 >= x && cursor.0 < x + size
+        && cursor.1 >= y && cursor.1 < y + size;
 
-    let size = 16.0 * scale;
-    let rect = Rect::from_min_size(pos, Vec2::splat(size));
+    if hovered {
+        elements.push(MenuElement::Rect {
+            x, y, w: size, h: size,
+            corner_radius: 0.0, color: HIGHLIGHT_COLOR,
+        });
+    }
 
-    let name = item_display_name(data.kind);
-    ui.painter().text(
-        rect.center(),
-        egui::Align2::CENTER_CENTER,
-        &name,
-        egui::FontId::proportional(9.0),
-        Color32::WHITE,
-    );
+    match item {
+        ItemStack::Empty => {
+            if let Some(sprite) = empty_sprite {
+                elements.push(MenuElement::Image {
+                    x, y, w: size, h: size,
+                    sprite, tint: WHITE,
+                });
+            }
+        }
+        ItemStack::Present(data) => {
+            let name = item_resource_name(data.kind);
+            elements.push(MenuElement::ItemIcon {
+                x, y, w: size, h: size,
+                item_name: name,
+                tint: WHITE,
+            });
 
-    if data.count > 1 {
-        ui.painter().text(
-            Pos2::new(rect.max.x - 1.0, rect.max.y - 1.0),
-            egui::Align2::RIGHT_BOTTOM,
-            data.count.to_string(),
-            egui::FontId::proportional(10.0),
-            Color32::WHITE,
-        );
+            if data.count > 1 {
+                let count_str = data.count.to_string();
+                elements.push(MenuElement::Text {
+                    x: x + size - 1.0 * scale, y: y + size - fs - 1.0 * scale,
+                    text: count_str, scale: fs * 0.85,
+                    color: COUNT_COLOR, centered: false,
+                });
+            }
+        }
     }
 }

@@ -26,6 +26,7 @@ pub enum ContextError {
     HandleError(#[from] raw_window_handle::HandleError),
 }
 
+#[allow(dead_code)]
 pub struct VulkanContext {
     pub entry: ash::Entry,
     pub instance: ash::Instance,
@@ -54,9 +55,9 @@ impl VulkanContext {
         let entry = unsafe { ash::Entry::load().expect("failed to load Vulkan") };
 
         let app_info = vk::ApplicationInfo::default()
-            .application_name(c"Ferrite")
+            .application_name(c"POMC")
             .application_version(vk::make_api_version(0, 0, 1, 0))
-            .engine_name(c"Ferrite Engine")
+            .engine_name(c"POMC Engine")
             .engine_version(vk::make_api_version(0, 0, 1, 0))
             .api_version(vk::make_api_version(0, 1, 3, 0));
 
@@ -64,14 +65,25 @@ impl VulkanContext {
         let mut required_extensions =
             ash_window::enumerate_required_extensions(display_handle)?.to_vec();
 
-        let enable_validation = cfg!(debug_assertions);
-        if enable_validation {
+        let validation_available = cfg!(debug_assertions)
+            && unsafe { entry.enumerate_instance_layer_properties() }
+                .unwrap_or_default()
+                .iter()
+                .any(|layer| {
+                    let name = unsafe { CStr::from_ptr(layer.layer_name.as_ptr()) };
+                    name.to_bytes() == b"VK_LAYER_KHRONOS_validation"
+                });
+
+        if validation_available {
             required_extensions.push(debug_utils::NAME.as_ptr());
         }
 
-        let layer_names: Vec<CString> = if enable_validation {
+        let layer_names: Vec<CString> = if validation_available {
             vec![CString::new("VK_LAYER_KHRONOS_validation").unwrap()]
         } else {
+            if cfg!(debug_assertions) {
+                log::warn!("Vulkan validation layers not available — install the Vulkan SDK for debug diagnostics");
+            }
             vec![]
         };
         let layer_ptrs: Vec<*const i8> = layer_names.iter().map(|l| l.as_ptr()).collect();
@@ -83,7 +95,7 @@ impl VulkanContext {
 
         let instance = unsafe { entry.create_instance(&instance_info, None)? };
 
-        let (debug_utils_loader, debug_messenger) = if enable_validation {
+        let (debug_utils_loader, debug_messenger) = if validation_available {
             let loader = debug_utils::Instance::new(&entry, &instance);
             let messenger_info = vk::DebugUtilsMessengerCreateInfoEXT::default()
                 .message_severity(

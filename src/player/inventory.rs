@@ -64,20 +64,10 @@ impl Inventory {
     }
 }
 
-pub fn item_display_name(kind: ItemKind) -> String {
+pub fn item_resource_name(kind: ItemKind) -> String {
     kind.to_string()
-        .replace('_', " ")
-        .split(' ')
-        .map(|word| {
-            let mut chars = word.chars();
-            match chars.next() {
-                Some(c) => {
-                    let upper: String = c.to_uppercase().collect();
-                    format!("{upper}{}", chars.as_str())
-                }
-                None => String::new(),
-            }
-        })
-        .collect::<Vec<_>>()
-        .join(" ")
+        .strip_prefix("minecraft:")
+        .unwrap_or("air")
+        .to_string()
 }
+

@@ -8,15 +8,25 @@ pub fn load_image(path: &Path) -> Result<image::DynamicImage, image::ImageError>
     })
 }
 
+pub fn resolve_asset_path(assets_dir: &Path, asset_index: &Option<AssetIndex>, asset_key: &str) -> PathBuf {
+    if let Some(path) = asset_index.as_ref().and_then(|idx| idx.resolve(asset_key)) {
+        return path;
+    }
+    let jar_path = assets_dir.join("jar").join("assets").join(asset_key);
+    if jar_path.exists() {
+        return jar_path;
+    }
+    assets_dir.join("assets").join(asset_key)
+}
+
 pub struct AssetIndex {
     objects_dir: PathBuf,
     hashes: HashMap<String, String>,
 }
 
 impl AssetIndex {
-    pub fn load(game_dir: &Path) -> Option<Self> {
-        let assets_dir = game_dir.join("assets");
-        let index_path = find_latest_asset_index(&assets_dir)?;
+    pub fn load(assets_dir: &Path) -> Option<Self> {
+        let index_path = find_latest_asset_index(assets_dir)?;
 
         let content = std::fs::read_to_string(&index_path)
             .map_err(|e| log::warn!("Failed to read asset index: {e}"))
@@ -49,23 +59,22 @@ impl AssetIndex {
 
 fn find_latest_asset_index(assets_dir: &Path) -> Option<PathBuf> {
     let indexes_dir = assets_dir.join("indexes");
-    let mut best: Option<(u32, PathBuf)> = None;
 
     let entries = std::fs::read_dir(&indexes_dir)
         .map_err(|e| log::warn!("Failed to read asset indexes dir: {e}"))
         .ok()?;
 
-    for entry in entries.flatten() {
-        let name = entry.file_name();
-        let name_str = name.to_string_lossy();
-        if let Some(num_str) = name_str.strip_suffix(".json") {
-            if let Ok(num) = num_str.parse::<u32>() {
-                if best.as_ref().is_none_or(|(b, _)| num > *b) {
-                    best = Some((num, entry.path()));
-                }
-            }
-        }
-    }
-
-    best.map(|(_, path)| path)
+    entries
+        .flatten()
+        .filter(|e| {
+            e.file_name()
+                .to_string_lossy()
+                .ends_with(".json")
+        })
+        .max_by_key(|e| {
+            e.metadata()
+                .and_then(|m| m.modified())
+                .unwrap_or(std::time::SystemTime::UNIX_EPOCH)
+        })
+        .map(|e| e.path())
 }

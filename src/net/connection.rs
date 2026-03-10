@@ -93,7 +93,7 @@ pub async fn connect_to_server(
 
     conn.write(ServerboundIntention {
         protocol_version: PROTOCOL_VERSION,
-        hostname: addr.ip().to_string(),
+        hostname: args.server.clone(),
         port: addr.port(),
         intention: ClientIntention::Login,
     })

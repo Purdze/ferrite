@@ -1,17 +1,17 @@
-# Ferrite
+# POMC
 
-A Minecraft client written in Rust from scratch. Ferrite connects to vanilla Minecraft servers, renders the world, and handles player physics  - all without relying on Mojang's Java codebase.
+A Minecraft client written in Rust from scratch. POMC connects to vanilla Minecraft servers, renders the world using Vulkan, and handles player physics — all without relying on Mojang's Java codebase.
 
-## Why Ferrite?
+## Why POMC?
 
-- **Performance**  - Native code with zero garbage collection pauses. GPU rendering through wgpu with direct Vulkan/DX12/Metal backends.
-- **Low memory footprint**  - No JVM overhead. Runs comfortably on hardware that struggles with vanilla Java Edition.
-- **Cross-platform**  - Builds natively on Windows, Linux, and macOS from a single codebase.
-- **Hackable**  - Clean, modular Rust codebase. Easy to understand, modify, and extend.
+- **Performance** — Native code with zero garbage collection pauses. GPU rendering through Vulkan via ash.
+- **Low memory footprint** — No JVM overhead. Runs comfortably on hardware that struggles with vanilla Java Edition.
+- **Cross-platform** — Builds natively on Windows, Linux, and macOS from a single codebase.
+- **Hackable** — Clean, modular Rust codebase. Easy to understand, modify, and extend.
 
 ## Current Status
 
-Ferrite is in active early development, working through milestones toward a fully playable client.
+POMC is in active early development, working through milestones toward a fully playable client.
 
 | Phase | Description | Status |
 |-------|-------------|--------|
@@ -19,9 +19,11 @@ Ferrite is in active early development, working through milestones toward a full
 | 2 | Camera movement + basic rendering | Done |
 | 3 | Server connection + protocol handling | Done |
 | 4 | Terrain rendering with textures | Done |
-| 5 | Player physics + collision | In progress |
-| 6 | HUD, chat, inventory | Planned |
-| 7 | Main menu, server list, settings | Planned |
+| 5 | Player physics + collision | Done |
+| 6 | HUD, chat, inventory | Done |
+| 7 | Main menu, server list, settings | Done |
+| 8 | Vulkan renderer migration | In progress |
+| 9 | GPU-driven rendering | Planned |
 
 ## Building
 
@@ -56,12 +58,15 @@ cargo run --release -- \
 
 | Component | Crate |
 |-----------|-------|
-| GPU rendering | `wgpu` |
+| Vulkan bindings | `ash` |
+| GPU memory | `gpu-allocator` |
 | Windowing | `winit` |
 | Math | `glam` |
 | Protocol | `azalea-protocol` |
 | Async runtime | `tokio` |
-| Textures | `image` |
+| UI | `egui` |
+| Textures | `png`, `image` |
+| Audio | `kira` |
 
 ## Contributing
 

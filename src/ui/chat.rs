@@ -1,16 +1,22 @@
 use std::collections::VecDeque;
 use std::time::Instant;
 
-use egui::{Color32, Pos2, Rect};
+use crate::renderer::pipelines::menu_overlay::MenuElement;
+use super::common::{self, WHITE};
 
 const MAX_MESSAGES: usize = 100;
 const VISIBLE_MESSAGES: usize = 10;
 const MESSAGE_LIFETIME_SECS: f32 = 10.0;
 const CHAT_X: f32 = 4.0;
 const CHAT_BOTTOM_OFFSET: f32 = 52.0;
-const LINE_HEIGHT: f32 = 16.0;
-const FONT_SIZE: f32 = 13.0;
-const INPUT_HEIGHT: f32 = 24.0;
+const LINE_HEIGHT: f32 = 12.0;
+const FONT_SIZE: f32 = 8.0;
+const CHAT_WIDTH: f32 = 320.0;
+const INPUT_HEIGHT: f32 = 16.0;
+const TEXT_PAD: f32 = 4.0;
+
+const MSG_BG: [f32; 4] = [0.0, 0.0, 0.0, 0.39];
+const INPUT_BG: [f32; 4] = [0.0, 0.0, 0.0, 0.5];
 
 struct ChatLine {
     text: String,
@@ -21,6 +27,7 @@ pub struct ChatState {
     messages: VecDeque<ChatLine>,
     input: String,
     open: bool,
+    cursor_blink: Instant,
 }
 
 impl ChatState {
@@ -29,6 +36,7 @@ impl ChatState {
             messages: VecDeque::new(),
             input: String::new(),
             open: false,
+            cursor_blink: Instant::now(),
         }
     }
 
@@ -49,93 +57,96 @@ impl ChatState {
     pub fn open(&mut self) {
         self.open = true;
         self.input.clear();
+        self.cursor_blink = Instant::now();
     }
 
     pub fn open_with_slash(&mut self) {
         self.open = true;
         self.input = "/".into();
+        self.cursor_blink = Instant::now();
     }
 
-    pub fn close(&mut self) {
-        self.open = false;
-        self.input.clear();
-    }
+    pub fn handle_key_input(&mut self, typed_chars: &[char], backspace: bool, enter: bool) -> Option<String> {
+        if !self.open {
+            return None;
+        }
 
-    pub fn take_pending_message(&mut self) -> Option<String> {
-        if self.open && !self.input.is_empty() {
-            let msg = self.input.clone();
+        for ch in typed_chars {
+            self.input.push(*ch);
+            self.cursor_blink = Instant::now();
+        }
+        if backspace {
+            self.input.pop();
+            self.cursor_blink = Instant::now();
+        }
+        if enter {
+            let msg = if self.input.is_empty() { None } else { Some(self.input.clone()) };
             self.input.clear();
             self.open = false;
-            Some(msg)
-        } else {
-            self.open = false;
-            None
+            return msg;
         }
+
+        None
     }
 
-    pub fn draw(&mut self, ctx: &egui::Context, screen: Rect) -> Option<String> {
+    pub fn build(
+        &self,
+        elements: &mut Vec<MenuElement>,
+        screen_h: f32,
+        gs: f32,
+        text_width_fn: &dyn Fn(&str, f32) -> f32,
+    ) {
         let now = Instant::now();
-        let chat_bottom = screen.max.y - CHAT_BOTTOM_OFFSET;
+        let fs = FONT_SIZE * gs;
+        let lh = LINE_HEIGHT * gs;
+        let chat_w = CHAT_WIDTH * gs;
+        let chat_x = CHAT_X * gs;
+        let pad = TEXT_PAD * gs;
+        let chat_bottom = screen_h - CHAT_BOTTOM_OFFSET * gs;
 
-        egui::Area::new(egui::Id::new("chat_messages"))
-            .fixed_pos(Pos2::ZERO)
-            .interactable(false)
-            .order(egui::Order::Foreground)
-            .show(ctx, |ui| {
-                ui.set_clip_rect(screen);
-                let painter = ui.painter();
+        let visible: Vec<&ChatLine> = if self.open {
+            self.messages.iter().rev().take(VISIBLE_MESSAGES).collect()
+        } else {
+            self.messages
+                .iter()
+                .rev()
+                .filter(|m| now.duration_since(m.received).as_secs_f32() < MESSAGE_LIFETIME_SECS)
+                .take(VISIBLE_MESSAGES)
+                .collect()
+        };
 
-                let visible: Vec<&ChatLine> = if self.open {
-                    self.messages.iter().rev().take(VISIBLE_MESSAGES).collect()
-                } else {
-                    self.messages
-                        .iter()
-                        .rev()
-                        .filter(|m| now.duration_since(m.received).as_secs_f32() < MESSAGE_LIFETIME_SECS)
-                        .take(VISIBLE_MESSAGES)
-                        .collect()
-                };
-
-                for (i, line) in visible.iter().enumerate() {
-                    let y = chat_bottom - (i as f32 + 1.0) * LINE_HEIGHT;
-                    let bg_rect = Rect::from_min_size(
-                        Pos2::new(CHAT_X, y),
-                        egui::Vec2::new(320.0, LINE_HEIGHT),
-                    );
-                    painter.rect_filled(bg_rect, 0.0, Color32::from_black_alpha(100));
-                    painter.text(
-                        Pos2::new(CHAT_X + 4.0, y + LINE_HEIGHT / 2.0),
-                        egui::Align2::LEFT_CENTER,
-                        &line.text,
-                        egui::FontId::proportional(FONT_SIZE),
-                        Color32::WHITE,
-                    );
-                }
-
-                ui.allocate_rect(screen, egui::Sense::hover());
+        for (i, line) in visible.iter().enumerate() {
+            let y = chat_bottom - (i as f32 + 1.0) * lh;
+            elements.push(MenuElement::Rect {
+                x: chat_x, y, w: chat_w, h: lh,
+                corner_radius: 0.0, color: MSG_BG,
             });
-
-        let mut pending = None;
-
-        if self.open {
-            egui::Area::new(egui::Id::new("chat_input"))
-                .fixed_pos(Pos2::new(CHAT_X, chat_bottom))
-                .order(egui::Order::Foreground)
-                .show(ctx, |ui| {
-                    let response = ui.add_sized(
-                        [320.0, INPUT_HEIGHT],
-                        egui::TextEdit::singleline(&mut self.input)
-                            .desired_width(312.0)
-                            .font(egui::FontId::proportional(FONT_SIZE)),
-                    );
-                    if response.lost_focus() {
-                        pending = self.take_pending_message();
-                    } else {
-                        response.request_focus();
-                    }
-                });
+            elements.push(MenuElement::Text {
+                x: chat_x + pad, y: y + (lh - fs) / 2.0,
+                text: line.text.clone(), scale: fs,
+                color: WHITE, centered: false,
+            });
         }
 
-        pending
+        if self.open {
+            let input_h = INPUT_HEIGHT * gs;
+            let text_y = chat_bottom + (input_h - fs) / 2.0;
+
+            elements.push(MenuElement::Rect {
+                x: chat_x, y: chat_bottom, w: chat_w, h: input_h,
+                corner_radius: 0.0, color: INPUT_BG,
+            });
+            elements.push(MenuElement::Text {
+                x: chat_x + pad, y: text_y,
+                text: self.input.clone(), scale: fs,
+                color: WHITE, centered: false,
+            });
+
+            let tw = text_width_fn(&self.input, fs);
+            common::push_cursor_blink(
+                elements, &self.cursor_blink,
+                chat_x + pad, text_y, gs, fs, tw,
+            );
+        }
     }
 }

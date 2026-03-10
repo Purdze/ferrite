@@ -16,11 +16,11 @@ use crate::physics::movement;
 use crate::player::interaction::InteractionState;
 use crate::player::LocalPlayer;
 use crate::renderer::chunk::mesher::MeshDispatcher;
+use crate::renderer::pipelines::menu_overlay::MenuElement;
 use crate::renderer::Renderer;
 use crate::ui::chat::ChatState;
 use crate::ui::hud;
-use crate::ui::inventory::{self, InventoryTextures};
-use crate::ui::menu::{MainMenu, MenuAction};
+use crate::ui::menu::{MainMenu, MenuAction, MenuInput, PanoramaTheme};
 use crate::ui::pause::{self, PauseAction};
 use crate::world::chunk::ChunkStore;
 use input::InputState;
@@ -55,6 +55,7 @@ struct App {
     packet_sender: Option<crate::net::sender::PacketSender>,
     chunk_store: ChunkStore,
     assets_dir: PathBuf,
+    game_dir: PathBuf,
     asset_index: Option<crate::assets::AssetIndex>,
     position_set: bool,
     state: GameState,
@@ -63,8 +64,6 @@ struct App {
     player: LocalPlayer,
     tick_accumulator: f32,
     prev_player_pos: glam::Vec3,
-    hud_textures: Option<hud::HudTextures>,
-    inventory_textures: Option<InventoryTextures>,
     mesh_dispatcher: Option<MeshDispatcher>,
     paused: bool,
     inventory_open: bool,
@@ -103,8 +102,9 @@ impl App {
             chat_sender,
             packet_sender,
             chunk_store: ChunkStore::new(VIEW_DISTANCE),
-            asset_index: crate::assets::AssetIndex::load(&game_dir),
+            asset_index: crate::assets::AssetIndex::load(&assets_dir),
             assets_dir,
+            game_dir: game_dir.clone(),
             position_set: false,
             state,
             menu: MainMenu::new(&game_dir, Arc::clone(&tokio_rt)),
@@ -112,8 +112,6 @@ impl App {
             player: LocalPlayer::new(),
             tick_accumulator: 0.0,
             prev_player_pos: glam::Vec3::ZERO,
-            hud_textures: None,
-            inventory_textures: None,
             mesh_dispatcher: None,
             paused: false,
             inventory_open: false,
@@ -275,7 +273,7 @@ impl ApplicationHandler for App {
         }
 
         let window_attrs = Window::default_attributes()
-            .with_title("Ferrite")
+            .with_title("POMC")
             .with_inner_size(winit::dpi::LogicalSize::new(854, 480));
 
         let window = match event_loop.create_window(window_attrs) {
@@ -296,21 +294,6 @@ impl ApplicationHandler for App {
             }
         };
 
-        self.hud_textures = Some(hud::HudTextures::load(
-            renderer.egui_ctx(),
-            &self.assets_dir,
-            &self.asset_index,
-        ));
-        crate::ui::font::McFont::load(
-            renderer.egui_ctx(),
-            &self.assets_dir,
-            &self.asset_index,
-        );
-        self.menu.load_splash(&self.assets_dir, &self.asset_index);
-        self.inventory_textures = Some(InventoryTextures::load(
-            renderer.egui_ctx(),
-            &self.assets_dir,
-        ));
         self.mesh_dispatcher = Some(renderer.create_mesh_dispatcher());
         self.renderer = Some(renderer);
         self.window = Some(window);
@@ -323,15 +306,6 @@ impl ApplicationHandler for App {
         _window_id: WindowId,
         event: WindowEvent,
     ) {
-        if matches!(self.state, GameState::Menu) || self.paused || self.chat.is_open() || self.inventory_open {
-            if let (Some(renderer), Some(window)) = (&mut self.renderer, &self.window) {
-                let response = renderer.handle_window_event(window, &event);
-                if response.consumed && !matches!(event, WindowEvent::RedrawRequested) {
-                    return;
-                }
-            }
-        }
-
         match event {
             WindowEvent::CloseRequested => {
                 event_loop.exit();
@@ -342,14 +316,16 @@ impl ApplicationHandler for App {
                 }
             }
             WindowEvent::KeyboardInput { event, .. } => {
-                if matches!(self.state, GameState::InGame) {
-                    if event.state.is_pressed() {
+                if matches!(self.state, GameState::Menu) {
+                    self.input.on_menu_key_event(&event);
+                } else if matches!(self.state, GameState::InGame) {
+                    if self.chat.is_open() {
+                        self.input.on_menu_key_event(&event);
+                    } else if event.state.is_pressed() {
                         if let PhysicalKey::Code(code) = event.physical_key {
                             match code {
                                 KeyCode::Escape => {
-                                    if self.chat.is_open() {
-                                        self.chat.close();
-                                    } else if self.inventory_open {
+                                    if self.inventory_open {
                                         self.inventory_open = false;
                                     } else {
                                         self.paused = !self.paused;
@@ -382,20 +358,26 @@ impl ApplicationHandler for App {
                 }
             }
             WindowEvent::MouseWheel { delta, .. } => {
-                if matches!(self.state, GameState::InGame) && !self.inventory_open {
-                    let scroll = match delta {
-                        winit::event::MouseScrollDelta::LineDelta(_, y) => y,
-                        winit::event::MouseScrollDelta::PixelDelta(p) => p.y as f32,
-                    };
+                let scroll = match delta {
+                    winit::event::MouseScrollDelta::LineDelta(_, y) => y,
+                    winit::event::MouseScrollDelta::PixelDelta(p) => p.y as f32,
+                };
+                if matches!(self.state, GameState::Menu) {
+                    self.input.on_menu_scroll(scroll);
+                } else if !self.inventory_open {
                     self.input.on_scroll(scroll);
                 }
             }
+            WindowEvent::CursorMoved { position, .. } => {
+                self.input.on_cursor_moved(position.x as f32, position.y as f32);
+            }
             WindowEvent::MouseInput { state, button, .. } => {
-                if matches!(self.state, GameState::InGame)
-                    && self.input.is_cursor_captured()
-                    && !self.paused
-                    && !self.inventory_open
+                if matches!(self.state, GameState::Menu)
+                    || self.paused
+                    || self.inventory_open
                 {
+                    self.input.on_mouse_button(button, state);
+                } else if self.input.is_cursor_captured() {
                     self.input.on_mouse_button(button, state);
                 }
             }
@@ -416,23 +398,52 @@ impl ApplicationHandler for App {
                         }
 
                         if let (Some(renderer), Some(window)) = (&mut self.renderer, &self.window) {
-                            let menu = &mut self.menu;
-                            let hud_textures = &self.hud_textures;
-                            let mut action = MenuAction::None;
-                            if let Err(e) = renderer.render_ui(window, self.panorama_scroll, |ctx| {
-                                if let Some(textures) = hud_textures {
-                                    action = menu.draw(ctx, textures);
-                                }
-                            }) {
+                            let sw = renderer.screen_width() as f32;
+                            let sh = renderer.screen_height() as f32;
+
+                            let menu_input = MenuInput {
+                                cursor: self.input.cursor_pos(),
+                                clicked: self.input.left_just_pressed(),
+                                typed_chars: self.input.drain_typed_chars(),
+                                backspace: self.input.backspace_pressed(),
+                                enter: self.input.enter_pressed(),
+                                escape: self.input.escape_pressed(),
+                                tab: self.input.tab_pressed(),
+                                f5: self.input.f5_pressed(),
+                                scroll_delta: self.input.consume_menu_scroll(),
+                            };
+
+                            let result = self.menu.build(sw, sh, &menu_input, |t, s| {
+                                renderer.menu_text_width(t, s)
+                            });
+                            let action = result.action;
+
+                            let cursor_icon = if result.cursor_pointer {
+                                winit::window::CursorIcon::Pointer
+                            } else {
+                                winit::window::CursorIcon::Default
+                            };
+                            window.set_cursor(cursor_icon);
+
+                            if let Err(e) = renderer.render_menu(window, self.panorama_scroll, result.blur, result.elements) {
                                 log::error!("Render error: {e}");
                             }
+
+                            self.input.clear_click_events();
 
                             match action {
                                 MenuAction::Connect { server, username } => {
                                     self.connect_to_server(server, username);
                                 }
-                                MenuAction::Quit => {
-                                    event_loop.exit();
+                                MenuAction::ChangeTheme(theme) => {
+                                    if let Some(renderer) = &mut self.renderer {
+                                        let panorama_dir = match theme {
+                                            PanoramaTheme::Default => self.assets_dir.clone(),
+                                            PanoramaTheme::Pomc => self.game_dir.join("pomc_panorama"),
+                                        };
+                                        renderer.reload_panorama(&panorama_dir, &self.asset_index);
+                                    }
+                                    self.menu.start_transition_open();
                                 }
                                 MenuAction::None => {}
                             }
@@ -449,7 +460,7 @@ impl ApplicationHandler for App {
                             }
                         }
 
-                        if !self.paused && !self.inventory_open {
+                        if !self.paused && !self.inventory_open && !self.chat.is_open() {
                             if let Some(renderer) = &mut self.renderer {
                                 renderer.update_camera(&mut self.input);
                             }
@@ -465,7 +476,7 @@ impl ApplicationHandler for App {
                         let interp_pos = self.prev_player_pos.lerp(self.player.position, alpha);
                         let eye_pos = interp_pos + glam::Vec3::new(0.0, 1.62, 0.0);
 
-                        if !self.paused && !self.inventory_open {
+                        if !self.paused && !self.inventory_open && !self.chat.is_open() {
                             let (yaw, pitch) = if let Some(r) = &self.renderer {
                                 (r.camera_yaw(), r.camera_pitch())
                             } else {
@@ -485,7 +496,19 @@ impl ApplicationHandler for App {
                             self.input.clear_click_events();
                         }
 
-                        let paused = self.paused;
+                        // Handle chat input before borrowing renderer
+                        let typed = self.input.drain_typed_chars();
+                        let backspace = self.input.backspace_pressed();
+                        let enter = self.input.enter_pressed();
+                        if let Some(msg) = self.chat.handle_key_input(&typed, backspace, enter) {
+                            self.send_chat_message(msg);
+                            self.apply_cursor_grab();
+                        }
+
+                        // Handle inventory close before borrowing renderer
+                        let mut close_inventory = false;
+                        let mut pause_action = PauseAction::None;
+
                         if let (Some(renderer), Some(window)) = (&mut self.renderer, &self.window) {
                             renderer.sync_camera_to_player(
                                 eye_pos,
@@ -493,69 +516,76 @@ impl ApplicationHandler for App {
                                 renderer.camera_pitch(),
                             );
 
-                            let selected_slot = self.input.selected_slot();
-                            let health = self.player.health;
-                            let food = self.player.food;
-                            let hud_textures = &self.hud_textures;
-                            let inv_textures = &self.inventory_textures;
-                            let inv_open = self.inventory_open;
-                            let player_inv = &self.player.inventory;
-                            let hide_cursor = !paused && !inv_open && !self.chat.is_open() && self.input.is_cursor_captured();
-                            let chat = &mut self.chat;
-                            let mut pause_action = PauseAction::None;
-                            let mut chat_msg = None;
-                            let mut close_inventory = false;
-                            if let Err(e) = renderer.render_world(window, hide_cursor, |ctx| {
-                                let screen = ctx.screen_rect();
-                                if let Some(textures) = hud_textures {
-                                    hud::draw_hud(ctx, textures, selected_slot, health, food);
-                                    if paused {
-                                        pause_action = pause::draw_pause_menu(ctx, textures);
-                                    }
-                                }
-                                if inv_open {
-                                    if let Some(textures) = inv_textures {
-                                        close_inventory = inventory::draw_inventory(ctx, textures, player_inv);
-                                    }
-                                }
-                                chat_msg = chat.draw(ctx, screen);
-                            }) {
+                            let sw = renderer.screen_width() as f32;
+                            let sh = renderer.screen_height() as f32;
+                            let gs = hud::gui_scale(sw, sh);
+
+                            let mut elements: Vec<MenuElement> = Vec::new();
+                            let hide_cursor = !self.paused && !self.inventory_open
+                                && !self.chat.is_open() && self.input.is_cursor_captured();
+
+                            hud::build_hud(
+                                &mut elements, sw, sh,
+                                self.input.selected_slot(),
+                                self.player.health,
+                                self.player.food,
+                            );
+
+                            if self.paused {
+                                let cursor = self.input.cursor_pos();
+                                let clicked = self.input.left_just_pressed();
+                                pause_action = pause::build_pause_menu(
+                                    &mut elements, sw, sh, cursor, clicked, gs,
+                                );
+                                self.input.clear_click_events();
+                            }
+
+                            if self.inventory_open {
+                                let cursor = self.input.cursor_pos();
+                                let clicked = self.input.left_just_pressed();
+                                close_inventory = crate::ui::inventory::build_inventory(
+                                    &mut elements, sw, sh, cursor, clicked,
+                                    &self.player.inventory, gs,
+                                );
+                                self.input.clear_click_events();
+                            }
+
+                            self.chat.build(&mut elements, sh, gs, &|t, s| {
+                                renderer.menu_text_width(t, s)
+                            });
+
+                            if let Err(e) = renderer.render_world(window, hide_cursor, elements) {
                                 log::error!("Render error: {e}");
                             }
+                        }
 
-                            if close_inventory {
-                                self.inventory_open = false;
+                        if close_inventory {
+                            self.inventory_open = false;
+                            self.apply_cursor_grab();
+                        }
+
+                        match pause_action {
+                            PauseAction::Resume => {
+                                self.paused = false;
                                 self.apply_cursor_grab();
                             }
-
-                            if let Some(msg) = chat_msg {
-                                self.send_chat_message(msg);
+                            PauseAction::Disconnect => {
+                                self.net_events = None;
+                                self.state = GameState::Menu;
+                                self.paused = false;
+                                self.position_set = false;
+                                self.chunk_store = ChunkStore::new(VIEW_DISTANCE);
+                                if let Some(renderer) = &mut self.renderer {
+                                    renderer.clear_chunk_meshes();
+                                    self.mesh_dispatcher =
+                                        Some(renderer.create_mesh_dispatcher());
+                                }
                                 self.apply_cursor_grab();
                             }
-
-                            match pause_action {
-                                PauseAction::Resume => {
-                                    self.paused = false;
-                                    self.apply_cursor_grab();
-                                }
-                                PauseAction::Disconnect => {
-                                    self.net_events = None;
-                                    self.state = GameState::Menu;
-                                    self.paused = false;
-                                    self.position_set = false;
-                                    self.chunk_store = ChunkStore::new(VIEW_DISTANCE);
-                                    if let Some(renderer) = &mut self.renderer {
-                                        renderer.clear_chunk_meshes();
-                                        self.mesh_dispatcher =
-                                            Some(renderer.create_mesh_dispatcher());
-                                    }
-                                    self.apply_cursor_grab();
-                                }
-                                PauseAction::Quit => {
-                                    event_loop.exit();
-                                }
-                                PauseAction::None => {}
+                            PauseAction::Quit => {
+                                event_loop.exit();
                             }
+                            PauseAction::None => {}
                         }
                     }
                 }

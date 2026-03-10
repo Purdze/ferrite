@@ -22,7 +22,8 @@ use chunk::buffer::ChunkBufferStore;
 use chunk::mesher::{ChunkMeshData, MeshDispatcher};
 use context::VulkanContext;
 use pipelines::chunk::ChunkPipeline;
-use pipelines::egui_render::EguiRenderer;
+use pipelines::hand::HandPipeline;
+use pipelines::menu_overlay::{MenuElement, MenuOverlayPipeline};
 use pipelines::panorama::PanoramaPipeline;
 use swapchain::SwapchainState;
 
@@ -40,8 +41,8 @@ pub enum RendererError {
 }
 
 enum RenderMode {
-    World,
-    Panorama(f32),
+    World { overlay: Vec<MenuElement> },
+    MainMenu { scroll: f32, blur: f32, elements: Vec<MenuElement> },
 }
 
 pub struct Renderer {
@@ -51,12 +52,10 @@ pub struct Renderer {
     registry: BlockRegistry,
     atlas: TextureAtlas,
     chunk_pipeline: ChunkPipeline,
+    hand_pipeline: HandPipeline,
     panorama_pipeline: PanoramaPipeline,
-    egui_renderer: EguiRenderer,
+    menu_pipeline: MenuOverlayPipeline,
     chunk_buffers: ChunkBufferStore,
-    egui_state: egui_winit::State,
-    egui_ctx: egui::Context,
-    assets_dir: std::path::PathBuf,
     swapchain_dirty: bool,
     width: u32,
     height: u32,
@@ -66,7 +65,7 @@ impl Renderer {
     pub fn new(
         window: Arc<Window>,
         assets_dir: &Path,
-        _asset_index: &Option<AssetIndex>,
+        asset_index: &Option<AssetIndex>,
     ) -> Result<Self, RendererError> {
         let size = window.inner_size();
         let ctx = VulkanContext::new(&window)?;
@@ -94,6 +93,7 @@ impl Renderer {
             ctx.command_pool,
             &ctx.allocator,
             assets_dir,
+            asset_index,
             &texture_names,
         )?;
 
@@ -104,6 +104,16 @@ impl Renderer {
             &atlas,
         );
 
+        let hand_pipeline = HandPipeline::new(
+            &ctx.device,
+            ctx.graphics_queue,
+            ctx.command_pool,
+            swapchain_state.render_pass,
+            &ctx.allocator,
+            assets_dir,
+            asset_index,
+        );
+
         let panorama_pipeline = PanoramaPipeline::new(
             &ctx.device,
             ctx.graphics_queue,
@@ -111,25 +121,20 @@ impl Renderer {
             swapchain_state.render_pass,
             &ctx.allocator,
             assets_dir,
+            asset_index,
         );
 
-        let egui_renderer = EguiRenderer::new(
+        let menu_pipeline = MenuOverlayPipeline::new(
             &ctx.device,
+            ctx.graphics_queue,
+            ctx.command_pool,
             swapchain_state.render_pass,
             &ctx.allocator,
+            assets_dir,
+            asset_index,
         );
 
         let chunk_buffers = ChunkBufferStore::new();
-
-        let egui_ctx = egui::Context::default();
-        let egui_state = egui_winit::State::new(
-            egui_ctx.clone(),
-            egui_ctx.viewport_id(),
-            &window,
-            None,
-            None,
-            None,
-        );
 
         Ok(Self {
             ctx,
@@ -138,12 +143,10 @@ impl Renderer {
             registry,
             atlas,
             chunk_pipeline,
+            hand_pipeline,
             panorama_pipeline,
-            egui_renderer,
+            menu_pipeline,
             chunk_buffers,
-            egui_state,
-            egui_ctx,
-            assets_dir: assets_dir.to_path_buf(),
             swapchain_dirty: false,
             width: size.width.max(1),
             height: size.height.max(1),
@@ -165,8 +168,6 @@ impl Renderer {
         unsafe { let _ = self.ctx.device.device_wait_idle(); }
 
         self.chunk_pipeline.destroy(&self.ctx.device, &self.ctx.allocator);
-        self.panorama_pipeline.destroy(&self.ctx.device, &self.ctx.allocator);
-        self.egui_renderer.destroy(&self.ctx.device, &self.ctx.allocator);
 
         self.swapchain.destroy(
             &self.ctx.device,
@@ -193,35 +194,20 @@ impl Renderer {
             &self.atlas,
         );
 
-        self.panorama_pipeline = PanoramaPipeline::new(
-            &self.ctx.device,
-            self.ctx.graphics_queue,
-            self.ctx.command_pool,
-            self.swapchain.render_pass,
-            &self.ctx.allocator,
-            &self.assets_dir,
-        );
-
-        self.egui_renderer = EguiRenderer::new(
-            &self.ctx.device,
-            self.swapchain.render_pass,
-            &self.ctx.allocator,
-        );
+        self.hand_pipeline.recreate_pipeline(&self.ctx.device, self.swapchain.render_pass);
+        self.panorama_pipeline.recreate_pipeline(&self.ctx.device, self.swapchain.render_pass);
+        self.menu_pipeline.recreate_pipeline(&self.ctx.device, self.swapchain.render_pass);
 
         self.swapchain_dirty = false;
         Ok(())
     }
 
-    pub fn handle_window_event(
-        &mut self,
-        window: &Window,
-        event: &winit::event::WindowEvent,
-    ) -> egui_winit::EventResponse {
-        self.egui_state.on_window_event(window, event)
+    pub fn screen_width(&self) -> u32 {
+        self.width
     }
 
-    pub fn egui_ctx(&self) -> &egui::Context {
-        &self.egui_ctx
+    pub fn screen_height(&self) -> u32 {
+        self.height
     }
 
     pub fn update_camera(&mut self, input: &mut InputState) {
@@ -270,18 +256,34 @@ impl Renderer {
         &mut self,
         window: &Window,
         hide_cursor: bool,
-        hud_fn: impl FnMut(&egui::Context),
+        overlay: Vec<MenuElement>,
     ) -> Result<(), RendererError> {
-        self.render_frame(window, hide_cursor, [0.529, 0.808, 0.922, 1.0], RenderMode::World, hud_fn)
+        self.render_frame(window, hide_cursor, [0.529, 0.808, 0.922, 1.0], RenderMode::World { overlay })
     }
 
-    pub fn render_ui(
+    pub fn render_menu(
         &mut self,
         window: &Window,
         scroll: f32,
-        ui_fn: impl FnMut(&egui::Context),
+        blur: f32,
+        elements: Vec<MenuElement>,
     ) -> Result<(), RendererError> {
-        self.render_frame(window, false, [0.0, 0.0, 0.0, 1.0], RenderMode::Panorama(scroll), ui_fn)
+        self.render_frame(window, false, [0.0, 0.0, 0.0, 1.0], RenderMode::MainMenu { scroll, blur, elements })
+    }
+
+    pub fn reload_panorama(&mut self, assets_dir: &Path, asset_index: &Option<crate::assets::AssetIndex>) {
+        self.panorama_pipeline.reload_cubemap(
+            &self.ctx.device,
+            self.ctx.graphics_queue,
+            self.ctx.command_pool,
+            &self.ctx.allocator,
+            assets_dir,
+            asset_index,
+        );
+    }
+
+    pub fn menu_text_width(&self, text: &str, scale: f32) -> f32 {
+        self.menu_pipeline.text_width(text, scale)
     }
 
     fn render_frame(
@@ -290,7 +292,6 @@ impl Renderer {
         hide_cursor: bool,
         clear_color: [f32; 4],
         mode: RenderMode,
-        ui_fn: impl FnMut(&egui::Context),
     ) -> Result<(), RendererError> {
         if self.swapchain_dirty {
             self.recreate_swapchain()?;
@@ -324,41 +325,14 @@ impl Renderer {
             Err(e) => return Err(e.into()),
         };
 
-        if matches!(mode, RenderMode::World) {
+        if matches!(mode, RenderMode::World { .. }) {
             let uniform = CameraUniform::from_camera(&self.camera);
             self.chunk_pipeline.update_camera(frame, &uniform);
         }
 
-        let raw_input = self.egui_state.take_egui_input(window);
-        let full_output = self.egui_ctx.run(raw_input, ui_fn);
-
-        self.egui_state
-            .handle_platform_output(window, full_output.platform_output);
-
         if hide_cursor {
             window.set_cursor_visible(false);
         }
-
-        let pixels_per_point = full_output.pixels_per_point;
-        let primitives = self
-            .egui_ctx
-            .tessellate(full_output.shapes, pixels_per_point);
-
-        for (id, delta) in &full_output.textures_delta.set {
-            self.egui_renderer.update_texture(
-                &self.ctx.device,
-                self.ctx.graphics_queue,
-                self.ctx.command_pool,
-                &self.ctx.allocator,
-                *id,
-                delta,
-            );
-        }
-
-        let screen_size = [
-            self.swapchain.extent.width as f32 / pixels_per_point,
-            self.swapchain.extent.height as f32 / pixels_per_point,
-        ];
 
         unsafe {
             self.ctx.device.reset_fences(&[fence])?;
@@ -416,24 +390,51 @@ impl Renderer {
             };
             self.ctx.device.cmd_set_scissor(cmd, 0, &[scissor]);
 
-            match mode {
-                RenderMode::World => {
+            let sw = self.swapchain.extent.width as f32;
+            let sh = self.swapchain.extent.height as f32;
+
+            match &mode {
+                RenderMode::World { overlay } => {
                     self.chunk_pipeline.bind(&self.ctx.device, cmd, frame);
                     self.chunk_buffers.draw(&self.ctx.device, cmd);
+
+                    let clear_attachment = vk::ClearAttachment {
+                        aspect_mask: vk::ImageAspectFlags::DEPTH,
+                        color_attachment: 0,
+                        clear_value: vk::ClearValue {
+                            depth_stencil: vk::ClearDepthStencilValue {
+                                depth: 1.0,
+                                stencil: 0,
+                            },
+                        },
+                    };
+                    let clear_rect = vk::ClearRect {
+                        rect: scissor,
+                        base_array_layer: 0,
+                        layer_count: 1,
+                    };
+                    self.ctx.device.cmd_clear_attachments(
+                        cmd,
+                        &[clear_attachment],
+                        &[clear_rect],
+                    );
+
+                    let aspect = sw / sh.max(1.0);
+                    self.hand_pipeline.update_and_draw(
+                        &self.ctx.device,
+                        cmd,
+                        frame,
+                        aspect,
+                    );
+
+                    self.menu_pipeline.draw(&self.ctx.device, cmd, sw, sh, overlay);
                 }
-                RenderMode::Panorama(scroll) => {
-                    self.panorama_pipeline.draw(&self.ctx.device, cmd, scroll);
+                RenderMode::MainMenu { scroll, blur, elements } => {
+                    let aspect = sw / sh.max(1.0);
+                    self.panorama_pipeline.draw(&self.ctx.device, cmd, *scroll, aspect, *blur);
+                    self.menu_pipeline.draw(&self.ctx.device, cmd, sw, sh, elements);
                 }
             }
-
-            self.egui_renderer.render(
-                &self.ctx.device,
-                &self.ctx.allocator,
-                cmd,
-                &primitives,
-                screen_size,
-                pixels_per_point,
-            );
 
             self.ctx.device.cmd_end_render_pass(cmd);
             self.ctx.device.end_command_buffer(cmd)?;
@@ -473,11 +474,6 @@ impl Renderer {
             }
         }
 
-        for id in &full_output.textures_delta.free {
-            self.egui_renderer
-                .free_texture(&self.ctx.device, &self.ctx.allocator, *id);
-        }
-
         self.ctx.advance_frame();
         Ok(())
     }
@@ -490,9 +486,11 @@ impl Drop for Renderer {
             .clear(&self.ctx.device, &self.ctx.allocator);
         self.chunk_pipeline
             .destroy(&self.ctx.device, &self.ctx.allocator);
+        self.hand_pipeline
+            .destroy(&self.ctx.device, &self.ctx.allocator);
         self.panorama_pipeline
             .destroy(&self.ctx.device, &self.ctx.allocator);
-        self.egui_renderer
+        self.menu_pipeline
             .destroy(&self.ctx.device, &self.ctx.allocator);
         self.atlas
             .destroy(&self.ctx.device, &self.ctx.allocator);

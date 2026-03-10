@@ -5,6 +5,7 @@ use std::sync::{Arc, Mutex};
 use ash::vk;
 use gpu_allocator::vulkan::{Allocation, Allocator};
 
+use crate::assets::{resolve_asset_path, AssetIndex};
 use crate::renderer::util;
 
 #[derive(Debug, Clone, Copy)]
@@ -22,18 +23,6 @@ pub struct AtlasUVMap {
 }
 
 impl AtlasUVMap {
-    pub fn empty() -> Self {
-        Self {
-            regions: HashMap::new(),
-            missing: AtlasRegion {
-                u_min: 0.0,
-                v_min: 0.0,
-                u_max: 1.0,
-                v_max: 1.0,
-            },
-        }
-    }
-
     pub fn get_region(&self, name: &str) -> AtlasRegion {
         self.regions.get(name).copied().unwrap_or(self.missing)
     }
@@ -56,6 +45,7 @@ impl TextureAtlas {
         command_pool: vk::CommandPool,
         allocator: &Arc<Mutex<Allocator>>,
         assets_dir: &Path,
+        asset_index: &Option<AssetIndex>,
         texture_names: &HashSet<&str>,
     ) -> Result<Self, vk::Result> {
         let tile_size = 16u32;
@@ -80,12 +70,12 @@ impl TextureAtlas {
             }
         }
 
-        let textures_path = assets_dir.join("assets/minecraft/textures/block");
         let mut slot = 1u32;
 
         for &name in texture_names {
-            let file_path = textures_path.join(format!("{name}.png"));
-            let pixels = match load_png(&file_path) {
+            let asset_key = format!("minecraft/textures/block/{name}.png");
+            let file_path = resolve_asset_path(assets_dir, asset_index, &asset_key);
+            let (data, img_w, img_h) = match util::load_png(&file_path) {
                 Some(p) => p,
                 None => {
                     log::warn!("Missing texture: {name}");
@@ -97,13 +87,13 @@ impl TextureAtlas {
             let origin = tile_origin(slot, grid_size, tile_size);
             let region = tile_region(origin, tile_size, atlas_size);
 
-            let img_width = pixels.width.min(tile_size);
-            let img_height = pixels.height.min(tile_size);
+            let img_width = img_w.min(tile_size);
+            let img_height = img_h.min(tile_size);
             for py in 0..img_height {
                 for px in 0..img_width {
-                    let src = ((py * pixels.width + px) * 4) as usize;
+                    let src = ((py * img_w + px) * 4) as usize;
                     let dst = (((origin.1 + py) * atlas_size + origin.0 + px) * 4) as usize;
-                    atlas_pixels[dst..dst + 4].copy_from_slice(&pixels.data[src..src + 4]);
+                    atlas_pixels[dst..dst + 4].copy_from_slice(&data[src..src + 4]);
                 }
             }
 
@@ -158,59 +148,6 @@ impl TextureAtlas {
         }
         unsafe { device.destroy_buffer(self.staging_buffer, None); }
     }
-}
-
-struct PngPixels {
-    data: Vec<u8>,
-    width: u32,
-    height: u32,
-}
-
-fn load_png(path: &Path) -> Option<PngPixels> {
-    let file = std::fs::File::open(path).ok()?;
-    let decoder = png::Decoder::new(file);
-    let mut reader = decoder.read_info().ok()?;
-    let mut buf = vec![0u8; reader.output_buffer_size()];
-    let info = reader.next_frame(&mut buf).ok()?;
-
-    let data = match info.color_type {
-        png::ColorType::Rgba => buf[..info.buffer_size()].to_vec(),
-        png::ColorType::Rgb => {
-            let pixels = info.width as usize * info.height as usize;
-            let mut rgba = Vec::with_capacity(pixels * 4);
-            for chunk in buf[..pixels * 3].chunks_exact(3) {
-                rgba.extend_from_slice(chunk);
-                rgba.push(255);
-            }
-            rgba
-        }
-        png::ColorType::GrayscaleAlpha => {
-            let pixels = info.width as usize * info.height as usize;
-            let mut rgba = Vec::with_capacity(pixels * 4);
-            for chunk in buf[..pixels * 2].chunks_exact(2) {
-                rgba.extend_from_slice(&[chunk[0], chunk[0], chunk[0], chunk[1]]);
-            }
-            rgba
-        }
-        png::ColorType::Grayscale => {
-            let pixels = info.width as usize * info.height as usize;
-            let mut rgba = Vec::with_capacity(pixels * 4);
-            for &g in &buf[..pixels] {
-                rgba.extend_from_slice(&[g, g, g, 255]);
-            }
-            rgba
-        }
-        png::ColorType::Indexed => {
-            log::warn!("Indexed PNG not supported: {}", path.display());
-            return None;
-        }
-    };
-
-    Some(PngPixels {
-        data,
-        width: info.width,
-        height: info.height,
-    })
 }
 
 fn tile_origin(slot: u32, grid_size: u32, tile_size: u32) -> (u32, u32) {

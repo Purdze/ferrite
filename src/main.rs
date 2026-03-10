@@ -1,5 +1,7 @@
 mod args;
 mod assets;
+mod data;
+mod downloader;
 mod net;
 mod physics;
 mod player;
@@ -8,50 +10,40 @@ mod ui;
 mod window;
 mod world;
 
-use std::path::PathBuf;
 use std::sync::Arc;
 
 use clap::Parser;
 
 use net::connection::ConnectArgs;
 
-fn default_minecraft_dir() -> PathBuf {
-    if cfg!(target_os = "windows") {
-        std::env::var("APPDATA")
-            .map(PathBuf::from)
-            .unwrap_or_default()
-            .join(".minecraft")
-    } else if cfg!(target_os = "macos") {
-        std::env::var("HOME")
-            .map(PathBuf::from)
-            .unwrap_or_default()
-            .join("Library/Application Support/minecraft")
-    } else {
-        std::env::var("HOME")
-            .map(PathBuf::from)
-            .unwrap_or_default()
-            .join(".minecraft")
-    }
-}
+const DEFAULT_VERSION: &str = "1.21.11";
 
 fn main() {
     env_logger::init();
 
     let args = args::LaunchArgs::parse();
+    let data = data::DataDir::resolve(args.game_dir.as_deref(), args.assets_dir.as_deref());
 
-    let assets_dir: PathBuf = args
-        .assets_dir
-        .as_deref()
-        .unwrap_or("reference/assets")
-        .into();
+    if let Err(e) = data.ensure_dirs() {
+        log::error!("Failed to create data directories: {e}");
+        std::process::exit(1);
+    }
 
-    let game_dir: PathBuf = args
-        .game_dir
-        .as_deref()
-        .map(PathBuf::from)
-        .unwrap_or_else(default_minecraft_dir);
+    log::info!("Data directory: {}", data.root.display());
 
     let rt = Arc::new(tokio::runtime::Runtime::new().expect("failed to create tokio runtime"));
+
+    if downloader::needs_download(&data) {
+        let version = args
+            .version
+            .as_deref()
+            .unwrap_or(DEFAULT_VERSION);
+        log::info!("Assets not found, downloading for version {version}...");
+        if let Err(e) = rt.block_on(downloader::download_assets(&data, version)) {
+            log::error!("Asset download failed: {e}");
+            log::info!("Continuing without downloaded assets...");
+        }
+    }
 
     let connection = if let Some(ref server) = args.server {
         let connect_args = ConnectArgs {
@@ -70,7 +62,7 @@ fn main() {
         None
     };
 
-    if let Err(e) = window::run(connection, assets_dir, game_dir, rt) {
+    if let Err(e) = window::run(connection, data.assets_dir.clone(), data.instance_dir.clone(), rt) {
         log::error!("Fatal: {e}");
         std::process::exit(1);
     }

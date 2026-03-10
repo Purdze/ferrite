@@ -4,26 +4,30 @@ use ash::vk;
 use gpu_allocator::vulkan::{Allocation, AllocationCreateDesc, AllocationScheme, Allocator};
 use gpu_allocator::MemoryLocation;
 
+use crate::assets::{resolve_asset_path, AssetIndex};
 use crate::renderer::shader;
 use crate::renderer::util;
+
+// Minecraft panorama face order differs from Vulkan cubemap layer order
+const FACE_TO_LAYER: [u32; 6] = [4, 1, 5, 0, 2, 3];
 
 pub struct PanoramaPipeline {
     pipeline: vk::Pipeline,
     pipeline_layout: vk::PipelineLayout,
-    scroll_layout: vk::DescriptorSetLayout,
-    strip_layout: vk::DescriptorSetLayout,
+    params_layout: vk::DescriptorSetLayout,
+    cube_layout: vk::DescriptorSetLayout,
     descriptor_pool: vk::DescriptorPool,
-    scroll_set: vk::DescriptorSet,
-    strip_set: vk::DescriptorSet,
-    scroll_buffer: vk::Buffer,
-    scroll_allocation: Option<Allocation>,
-    strip_image: vk::Image,
-    strip_view: vk::ImageView,
-    strip_sampler: vk::Sampler,
-    strip_allocation: Option<Allocation>,
+    params_set: vk::DescriptorSet,
+    cube_set: vk::DescriptorSet,
+    params_buffer: vk::Buffer,
+    params_allocation: Option<Allocation>,
+    cube_image: vk::Image,
+    cube_view: vk::ImageView,
+    cube_sampler: vk::Sampler,
+    cube_allocation: Option<Allocation>,
     staging_buffer: vk::Buffer,
     staging_allocation: Option<Allocation>,
-    has_strip: bool,
+    has_cubemap: bool,
 }
 
 impl PanoramaPipeline {
@@ -34,19 +38,20 @@ impl PanoramaPipeline {
         render_pass: vk::RenderPass,
         allocator: &Arc<Mutex<Allocator>>,
         assets_dir: &std::path::Path,
+        asset_index: &Option<AssetIndex>,
     ) -> Self {
-        let scroll_layout = util::create_descriptor_set_layout(
+        let params_layout = util::create_descriptor_set_layout(
             device,
             vk::DescriptorType::UNIFORM_BUFFER,
             vk::ShaderStageFlags::FRAGMENT,
         );
-        let strip_layout = util::create_descriptor_set_layout(
+        let cube_layout = util::create_descriptor_set_layout(
             device,
             vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
             vk::ShaderStageFlags::FRAGMENT,
         );
 
-        let layouts = [scroll_layout, strip_layout];
+        let layouts = [params_layout, cube_layout];
         let layout_info = vk::PipelineLayoutCreateInfo::default().set_layouts(&layouts);
         let pipeline_layout = unsafe { device.create_pipeline_layout(&layout_info, None) }
             .expect("failed to create panorama pipeline layout");
@@ -69,77 +74,77 @@ impl PanoramaPipeline {
         let descriptor_pool = unsafe { device.create_descriptor_pool(&pool_info, None) }
             .expect("failed to create panorama descriptor pool");
 
-        let scroll_layouts = [scroll_layout];
-        let scroll_alloc = vk::DescriptorSetAllocateInfo::default()
+        let params_layouts = [params_layout];
+        let params_alloc = vk::DescriptorSetAllocateInfo::default()
             .descriptor_pool(descriptor_pool)
-            .set_layouts(&scroll_layouts);
-        let scroll_set = unsafe { device.allocate_descriptor_sets(&scroll_alloc) }
-            .expect("failed to allocate scroll descriptor set")[0];
+            .set_layouts(&params_layouts);
+        let params_set = unsafe { device.allocate_descriptor_sets(&params_alloc) }
+            .expect("failed to allocate params descriptor set")[0];
 
-        let strip_layouts = [strip_layout];
-        let strip_alloc = vk::DescriptorSetAllocateInfo::default()
+        let cube_layouts = [cube_layout];
+        let cube_alloc = vk::DescriptorSetAllocateInfo::default()
             .descriptor_pool(descriptor_pool)
-            .set_layouts(&strip_layouts);
-        let strip_set = unsafe { device.allocate_descriptor_sets(&strip_alloc) }
-            .expect("failed to allocate strip descriptor set")[0];
+            .set_layouts(&cube_layouts);
+        let cube_set = unsafe { device.allocate_descriptor_sets(&cube_alloc) }
+            .expect("failed to allocate cube descriptor set")[0];
 
-        let (scroll_buffer, scroll_allocation) = create_scroll_buffer(device, allocator);
+        let (params_buffer, params_allocation) = util::create_uniform_buffer(device, allocator, 16, "panorama_params");
 
         let buffer_info = [vk::DescriptorBufferInfo {
-            buffer: scroll_buffer,
+            buffer: params_buffer,
             offset: 0,
-            range: std::mem::size_of::<f32>() as u64,
+            range: 16,
         }];
         let write = vk::WriteDescriptorSet::default()
-            .dst_set(scroll_set)
+            .dst_set(params_set)
             .dst_binding(0)
             .descriptor_type(vk::DescriptorType::UNIFORM_BUFFER)
             .buffer_info(&buffer_info);
         unsafe { device.update_descriptor_sets(&[write], &[]) };
 
-        let (strip_image, strip_view, strip_sampler, strip_alloc_mem, staging_buffer, staging_alloc_mem, has_strip) =
-            load_panorama_strip(device, queue, command_pool, allocator, assets_dir);
+        let (cube_image, cube_view, cube_sampler, cube_alloc_mem, staging_buffer, staging_alloc_mem, has_cubemap) =
+            load_cubemap(device, queue, command_pool, allocator, assets_dir, asset_index);
 
         let image_info = [vk::DescriptorImageInfo {
-            sampler: strip_sampler,
-            image_view: strip_view,
+            sampler: cube_sampler,
+            image_view: cube_view,
             image_layout: vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
         }];
-        let strip_write = vk::WriteDescriptorSet::default()
-            .dst_set(strip_set)
+        let cube_write = vk::WriteDescriptorSet::default()
+            .dst_set(cube_set)
             .dst_binding(0)
             .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
             .image_info(&image_info);
-        unsafe { device.update_descriptor_sets(&[strip_write], &[]) };
+        unsafe { device.update_descriptor_sets(&[cube_write], &[]) };
 
         Self {
             pipeline,
             pipeline_layout,
-            scroll_layout,
-            strip_layout,
+            params_layout,
+            cube_layout,
             descriptor_pool,
-            scroll_set,
-            strip_set,
-            scroll_buffer,
-            scroll_allocation: Some(scroll_allocation),
-            strip_image,
-            strip_view,
-            strip_sampler,
-            strip_allocation: Some(strip_alloc_mem),
+            params_set,
+            cube_set,
+            params_buffer,
+            params_allocation: Some(params_allocation),
+            cube_image,
+            cube_view,
+            cube_sampler,
+            cube_allocation: Some(cube_alloc_mem),
             staging_buffer,
             staging_allocation: Some(staging_alloc_mem),
-            has_strip,
+            has_cubemap,
         }
     }
 
-    pub fn draw(&mut self, device: &ash::Device, cmd: vk::CommandBuffer, scroll: f32) {
-        if !self.has_strip {
+    pub fn draw(&mut self, device: &ash::Device, cmd: vk::CommandBuffer, scroll: f32, aspect: f32, blur: f32) {
+        if !self.has_cubemap {
             return;
         }
 
-        let bytes = scroll.to_le_bytes();
-        self.scroll_allocation.as_mut().unwrap().mapped_slice_mut().unwrap()[..4]
-            .copy_from_slice(&bytes);
+        let data: [f32; 4] = [scroll, aspect, blur, 0.0];
+        self.params_allocation.as_mut().unwrap().mapped_slice_mut().unwrap()[..16]
+            .copy_from_slice(bytemuck::cast_slice(&data));
 
         unsafe {
             device.cmd_bind_pipeline(cmd, vk::PipelineBindPoint::GRAPHICS, self.pipeline);
@@ -148,29 +153,79 @@ impl PanoramaPipeline {
                 vk::PipelineBindPoint::GRAPHICS,
                 self.pipeline_layout,
                 0,
-                &[self.scroll_set, self.strip_set],
+                &[self.params_set, self.cube_set],
                 &[],
             );
             device.cmd_draw(cmd, 3, 1, 0, 0);
         }
     }
 
+    pub fn reload_cubemap(
+        &mut self,
+        device: &ash::Device,
+        queue: vk::Queue,
+        command_pool: vk::CommandPool,
+        allocator: &Arc<Mutex<Allocator>>,
+        assets_dir: &std::path::Path,
+        asset_index: &Option<AssetIndex>,
+    ) {
+        unsafe { let _ = device.device_wait_idle(); }
+
+        {
+            let mut alloc = allocator.lock().unwrap();
+            unsafe { device.destroy_sampler(self.cube_sampler, None); }
+            unsafe { device.destroy_image_view(self.cube_view, None); }
+            if let Some(a) = self.cube_allocation.take() { alloc.free(a).ok(); }
+            unsafe { device.destroy_image(self.cube_image, None); }
+            if let Some(a) = self.staging_allocation.take() { alloc.free(a).ok(); }
+            unsafe { device.destroy_buffer(self.staging_buffer, None); }
+        }
+
+        let (cube_image, cube_view, cube_sampler, cube_alloc, staging_buffer, staging_alloc, has_cubemap) =
+            load_cubemap(device, queue, command_pool, allocator, assets_dir, asset_index);
+
+        self.cube_image = cube_image;
+        self.cube_view = cube_view;
+        self.cube_sampler = cube_sampler;
+        self.cube_allocation = Some(cube_alloc);
+        self.staging_buffer = staging_buffer;
+        self.staging_allocation = Some(staging_alloc);
+        self.has_cubemap = has_cubemap;
+
+        let image_info = [vk::DescriptorImageInfo {
+            sampler: self.cube_sampler,
+            image_view: self.cube_view,
+            image_layout: vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
+        }];
+        let cube_write = vk::WriteDescriptorSet::default()
+            .dst_set(self.cube_set)
+            .dst_binding(0)
+            .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+            .image_info(&image_info);
+        unsafe { device.update_descriptor_sets(&[cube_write], &[]) };
+    }
+
+    pub fn recreate_pipeline(&mut self, device: &ash::Device, render_pass: vk::RenderPass) {
+        unsafe { device.destroy_pipeline(self.pipeline, None) };
+        self.pipeline = create_pipeline(device, render_pass, self.pipeline_layout);
+    }
+
     pub fn destroy(&mut self, device: &ash::Device, allocator: &Arc<Mutex<Allocator>>) {
         let mut alloc = allocator.lock().unwrap();
 
-        unsafe { device.destroy_buffer(self.scroll_buffer, None) };
-        if let Some(a) = self.scroll_allocation.take() {
+        unsafe { device.destroy_buffer(self.params_buffer, None) };
+        if let Some(a) = self.params_allocation.take() {
             alloc.free(a).ok();
         }
 
         unsafe {
-            device.destroy_sampler(self.strip_sampler, None);
-            device.destroy_image_view(self.strip_view, None);
+            device.destroy_sampler(self.cube_sampler, None);
+            device.destroy_image_view(self.cube_view, None);
         }
-        if let Some(a) = self.strip_allocation.take() {
+        if let Some(a) = self.cube_allocation.take() {
             alloc.free(a).ok();
         }
-        unsafe { device.destroy_image(self.strip_image, None) };
+        unsafe { device.destroy_image(self.cube_image, None) };
 
         if let Some(a) = self.staging_allocation.take() {
             alloc.free(a).ok();
@@ -183,116 +238,397 @@ impl PanoramaPipeline {
             device.destroy_pipeline(self.pipeline, None);
             device.destroy_pipeline_layout(self.pipeline_layout, None);
             device.destroy_descriptor_pool(self.descriptor_pool, None);
-            device.destroy_descriptor_set_layout(self.scroll_layout, None);
-            device.destroy_descriptor_set_layout(self.strip_layout, None);
+            device.destroy_descriptor_set_layout(self.params_layout, None);
+            device.destroy_descriptor_set_layout(self.cube_layout, None);
         }
     }
 }
 
-fn create_scroll_buffer(
-    device: &ash::Device,
-    allocator: &Arc<Mutex<Allocator>>,
-) -> (vk::Buffer, Allocation) {
-    let buffer_info = vk::BufferCreateInfo::default()
-        .size(std::mem::size_of::<f32>() as u64)
-        .usage(vk::BufferUsageFlags::UNIFORM_BUFFER)
-        .sharing_mode(vk::SharingMode::EXCLUSIVE);
-
-    let buffer = unsafe { device.create_buffer(&buffer_info, None) }
-        .expect("failed to create scroll buffer");
-    let mem_reqs = unsafe { device.get_buffer_memory_requirements(buffer) };
-
-    let allocation = allocator
-        .lock()
-        .unwrap()
-        .allocate(&AllocationCreateDesc {
-            name: "panorama_scroll",
-            requirements: mem_reqs,
-            location: MemoryLocation::CpuToGpu,
-            linear: true,
-            allocation_scheme: AllocationScheme::GpuAllocatorManaged,
-        })
-        .expect("failed to allocate scroll buffer memory");
-
-    unsafe {
-        device
-            .bind_buffer_memory(buffer, allocation.memory(), allocation.offset())
-            .expect("failed to bind scroll buffer memory");
+fn resolve_panorama_face(
+    i: u32,
+    assets_dir: &std::path::Path,
+    asset_index: &Option<AssetIndex>,
+) -> Option<std::path::PathBuf> {
+    let flat = assets_dir.join(format!("panorama_{i}.png"));
+    if flat.exists() {
+        return Some(flat);
     }
-
-    (buffer, allocation)
+    let asset_key = format!("minecraft/textures/gui/title/background/panorama_{i}.png");
+    let path = resolve_asset_path(assets_dir, asset_index, &asset_key);
+    path.exists().then_some(path)
 }
 
-fn load_panorama_strip(
+fn flip_horizontal(data: &[u8], w: u32, h: u32) -> Vec<u8> {
+    let mut out = vec![0u8; data.len()];
+    let stride = (w * 4) as usize;
+    for y in 0..h as usize {
+        for x in 0..w as usize {
+            let src = y * stride + x * 4;
+            let dst = y * stride + (w as usize - 1 - x) * 4;
+            out[dst..dst + 4].copy_from_slice(&data[src..src + 4]);
+        }
+    }
+    out
+}
+
+fn load_cubemap(
     device: &ash::Device,
     queue: vk::Queue,
     command_pool: vk::CommandPool,
     allocator: &Arc<Mutex<Allocator>>,
     assets_dir: &std::path::Path,
+    asset_index: &Option<AssetIndex>,
 ) -> (vk::Image, vk::ImageView, vk::Sampler, Allocation, vk::Buffer, Allocation, bool) {
-    let panorama_dir = assets_dir.join("assets/minecraft/textures/gui/title/background");
-
     let mut faces: Vec<Vec<u8>> = Vec::new();
     let mut face_w = 0u32;
     let mut face_h = 0u32;
 
     for i in 0..6 {
-        let path = panorama_dir.join(format!("panorama_{i}.png"));
-        match load_png_rgba(&path) {
+        let path = match resolve_panorama_face(i, assets_dir, asset_index) {
+            Some(p) => p,
+            None => {
+                log::info!("Panorama face {i} not found, skipping cubemap");
+                return create_fallback_cubemap(device, allocator);
+            }
+        };
+        match util::load_png(&path) {
             Some((data, w, h)) if w > 1 && h > 1 => {
                 face_w = w;
                 face_h = h;
                 faces.push(data);
             }
             _ => {
-                log::info!("Panorama textures not available, skipping");
-                return create_fallback_strip(device, allocator);
+                log::info!("Panorama face {i} is a placeholder, skipping cubemap");
+                return create_fallback_cubemap(device, allocator);
             }
         }
     }
 
-    let strip_w = face_w * 6;
-    let strip_h = face_h;
-    let mut strip_pixels = vec![0u8; (strip_w * strip_h * 4) as usize];
+    let face_bytes = (face_w * face_h * 4) as usize;
+    let mut staging_data = vec![0u8; face_bytes * 6];
 
-    for (i, face) in faces.iter().enumerate() {
-        let x_off = (i as u32) * face_w;
-        for y in 0..face_h {
-            let dst_start = ((y * strip_w + x_off) * 4) as usize;
-            let src_start = (y * face_w * 4) as usize;
-            let len = (face_w * 4) as usize;
-            strip_pixels[dst_start..dst_start + len]
-                .copy_from_slice(&face[src_start..src_start + len]);
-        }
+    for (panorama_idx, face_data) in faces.iter().enumerate() {
+        let layer = FACE_TO_LAYER[panorama_idx] as usize;
+        let flipped = flip_horizontal(face_data, face_w, face_h);
+        staging_data[layer * face_bytes..(layer + 1) * face_bytes]
+            .copy_from_slice(&flipped);
     }
 
-    let (image, view, allocation) = util::create_gpu_image(device, allocator, strip_w, strip_h, "panorama_strip");
-    let (staging_buffer, staging_allocation) = util::create_staging_buffer(device, allocator, &strip_pixels, "panorama_staging");
+    let (image, allocation) = create_cubemap_image(device, allocator, face_w, face_h);
+    let (staging_buffer, staging_allocation) =
+        util::create_staging_buffer(device, allocator, &staging_data, "panorama_cubemap_staging");
 
-    util::upload_image(device, queue, command_pool, staging_buffer, image, strip_w, strip_h);
+    upload_cubemap(device, queue, command_pool, staging_buffer, image, face_w, face_h);
+
+    let mip_levels = mip_levels_for(face_w, face_h);
+    let view = create_cubemap_view(device, image, mip_levels);
 
     let sampler_info = vk::SamplerCreateInfo::default()
         .mag_filter(vk::Filter::LINEAR)
         .min_filter(vk::Filter::LINEAR)
         .mipmap_mode(vk::SamplerMipmapMode::LINEAR)
-        .address_mode_u(vk::SamplerAddressMode::REPEAT)
+        .address_mode_u(vk::SamplerAddressMode::CLAMP_TO_EDGE)
         .address_mode_v(vk::SamplerAddressMode::CLAMP_TO_EDGE)
-        .address_mode_w(vk::SamplerAddressMode::CLAMP_TO_EDGE);
+        .address_mode_w(vk::SamplerAddressMode::CLAMP_TO_EDGE)
+        .max_lod(mip_levels as f32);
     let sampler = unsafe { device.create_sampler(&sampler_info, None) }
-        .expect("failed to create panorama sampler");
+        .expect("failed to create cubemap sampler");
 
-    log::info!("Panorama strip loaded: {strip_w}x{strip_h}");
+    log::info!("Panorama cubemap loaded: {face_w}x{face_h} per face, {mip_levels} mip levels");
 
     (image, view, sampler, allocation, staging_buffer, staging_allocation, true)
 }
 
-fn create_fallback_strip(
+fn mip_levels_for(w: u32, h: u32) -> u32 {
+    (w.max(h) as f32).log2().floor() as u32 + 1
+}
+
+fn create_cubemap_image(
+    device: &ash::Device,
+    allocator: &Arc<Mutex<Allocator>>,
+    width: u32,
+    height: u32,
+) -> (vk::Image, Allocation) {
+    let mip_levels = mip_levels_for(width, height);
+    let image_info = vk::ImageCreateInfo::default()
+        .image_type(vk::ImageType::TYPE_2D)
+        .format(vk::Format::R8G8B8A8_SRGB)
+        .extent(vk::Extent3D { width, height, depth: 1 })
+        .mip_levels(mip_levels)
+        .array_layers(6)
+        .samples(vk::SampleCountFlags::TYPE_1)
+        .tiling(vk::ImageTiling::OPTIMAL)
+        .usage(vk::ImageUsageFlags::TRANSFER_DST | vk::ImageUsageFlags::TRANSFER_SRC | vk::ImageUsageFlags::SAMPLED)
+        .flags(vk::ImageCreateFlags::CUBE_COMPATIBLE);
+
+    let image = unsafe { device.create_image(&image_info, None) }
+        .expect("failed to create cubemap image");
+    let mem_reqs = unsafe { device.get_image_memory_requirements(image) };
+
+    let allocation = allocator
+        .lock()
+        .unwrap()
+        .allocate(&AllocationCreateDesc {
+            name: "panorama_cubemap",
+            requirements: mem_reqs,
+            location: MemoryLocation::GpuOnly,
+            linear: false,
+            allocation_scheme: AllocationScheme::GpuAllocatorManaged,
+        })
+        .expect("failed to allocate cubemap memory");
+
+    unsafe {
+        device
+            .bind_image_memory(image, allocation.memory(), allocation.offset())
+            .expect("failed to bind cubemap memory");
+    }
+
+    (image, allocation)
+}
+
+fn create_cubemap_view(device: &ash::Device, image: vk::Image, mip_levels: u32) -> vk::ImageView {
+    let view_info = vk::ImageViewCreateInfo::default()
+        .image(image)
+        .view_type(vk::ImageViewType::CUBE)
+        .format(vk::Format::R8G8B8A8_SRGB)
+        .subresource_range(vk::ImageSubresourceRange {
+            aspect_mask: vk::ImageAspectFlags::COLOR,
+            base_mip_level: 0,
+            level_count: mip_levels,
+            base_array_layer: 0,
+            layer_count: 6,
+        });
+    unsafe { device.create_image_view(&view_info, None) }
+        .expect("failed to create cubemap view")
+}
+
+fn upload_cubemap(
+    device: &ash::Device,
+    queue: vk::Queue,
+    command_pool: vk::CommandPool,
+    staging_buffer: vk::Buffer,
+    image: vk::Image,
+    face_w: u32,
+    face_h: u32,
+) {
+    let mip_levels = mip_levels_for(face_w, face_h);
+
+    let alloc_info = vk::CommandBufferAllocateInfo::default()
+        .command_pool(command_pool)
+        .level(vk::CommandBufferLevel::PRIMARY)
+        .command_buffer_count(1);
+    let cmd = unsafe { device.allocate_command_buffers(&alloc_info) }
+        .expect("failed to allocate upload cmd")[0];
+
+    let begin = vk::CommandBufferBeginInfo::default()
+        .flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT);
+    unsafe { device.begin_command_buffer(cmd, &begin) }.expect("failed to begin cmd");
+
+    let all_mips_range = vk::ImageSubresourceRange {
+        aspect_mask: vk::ImageAspectFlags::COLOR,
+        base_mip_level: 0,
+        level_count: mip_levels,
+        base_array_layer: 0,
+        layer_count: 6,
+    };
+
+    let barrier_to_transfer = vk::ImageMemoryBarrier::default()
+        .image(image)
+        .old_layout(vk::ImageLayout::UNDEFINED)
+        .new_layout(vk::ImageLayout::TRANSFER_DST_OPTIMAL)
+        .src_access_mask(vk::AccessFlags::empty())
+        .dst_access_mask(vk::AccessFlags::TRANSFER_WRITE)
+        .subresource_range(all_mips_range);
+
+    unsafe {
+        device.cmd_pipeline_barrier(
+            cmd,
+            vk::PipelineStageFlags::TOP_OF_PIPE,
+            vk::PipelineStageFlags::TRANSFER,
+            vk::DependencyFlags::empty(),
+            &[],
+            &[],
+            &[barrier_to_transfer],
+        );
+    }
+
+    let face_bytes = (face_w * face_h * 4) as u64;
+    let regions: Vec<vk::BufferImageCopy> = (0..6)
+        .map(|layer| {
+            vk::BufferImageCopy {
+                buffer_offset: layer as u64 * face_bytes,
+                buffer_row_length: 0,
+                buffer_image_height: 0,
+                image_subresource: vk::ImageSubresourceLayers {
+                    aspect_mask: vk::ImageAspectFlags::COLOR,
+                    mip_level: 0,
+                    base_array_layer: layer,
+                    layer_count: 1,
+                },
+                image_offset: vk::Offset3D { x: 0, y: 0, z: 0 },
+                image_extent: vk::Extent3D {
+                    width: face_w,
+                    height: face_h,
+                    depth: 1,
+                },
+            }
+        })
+        .collect();
+
+    unsafe {
+        device.cmd_copy_buffer_to_image(
+            cmd,
+            staging_buffer,
+            image,
+            vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+            &regions,
+        );
+    }
+
+    let mut mip_w = face_w as i32;
+    let mut mip_h = face_h as i32;
+
+    for level in 1..mip_levels {
+        let barrier_src = vk::ImageMemoryBarrier::default()
+            .image(image)
+            .old_layout(vk::ImageLayout::TRANSFER_DST_OPTIMAL)
+            .new_layout(vk::ImageLayout::TRANSFER_SRC_OPTIMAL)
+            .src_access_mask(vk::AccessFlags::TRANSFER_WRITE)
+            .dst_access_mask(vk::AccessFlags::TRANSFER_READ)
+            .subresource_range(vk::ImageSubresourceRange {
+                aspect_mask: vk::ImageAspectFlags::COLOR,
+                base_mip_level: level - 1,
+                level_count: 1,
+                base_array_layer: 0,
+                layer_count: 6,
+            });
+
+        unsafe {
+            device.cmd_pipeline_barrier(
+                cmd,
+                vk::PipelineStageFlags::TRANSFER,
+                vk::PipelineStageFlags::TRANSFER,
+                vk::DependencyFlags::empty(),
+                &[],
+                &[],
+                &[barrier_src],
+            );
+        }
+
+        let next_w = (mip_w / 2).max(1);
+        let next_h = (mip_h / 2).max(1);
+
+        let blit = vk::ImageBlit {
+            src_subresource: vk::ImageSubresourceLayers {
+                aspect_mask: vk::ImageAspectFlags::COLOR,
+                mip_level: level - 1,
+                base_array_layer: 0,
+                layer_count: 6,
+            },
+            src_offsets: [
+                vk::Offset3D { x: 0, y: 0, z: 0 },
+                vk::Offset3D { x: mip_w, y: mip_h, z: 1 },
+            ],
+            dst_subresource: vk::ImageSubresourceLayers {
+                aspect_mask: vk::ImageAspectFlags::COLOR,
+                mip_level: level,
+                base_array_layer: 0,
+                layer_count: 6,
+            },
+            dst_offsets: [
+                vk::Offset3D { x: 0, y: 0, z: 0 },
+                vk::Offset3D { x: next_w, y: next_h, z: 1 },
+            ],
+        };
+
+        unsafe {
+            device.cmd_blit_image(
+                cmd,
+                image,
+                vk::ImageLayout::TRANSFER_SRC_OPTIMAL,
+                image,
+                vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+                &[blit],
+                vk::Filter::LINEAR,
+            );
+        }
+
+        let barrier_read = vk::ImageMemoryBarrier::default()
+            .image(image)
+            .old_layout(vk::ImageLayout::TRANSFER_SRC_OPTIMAL)
+            .new_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
+            .src_access_mask(vk::AccessFlags::TRANSFER_READ)
+            .dst_access_mask(vk::AccessFlags::SHADER_READ)
+            .subresource_range(vk::ImageSubresourceRange {
+                aspect_mask: vk::ImageAspectFlags::COLOR,
+                base_mip_level: level - 1,
+                level_count: 1,
+                base_array_layer: 0,
+                layer_count: 6,
+            });
+
+        unsafe {
+            device.cmd_pipeline_barrier(
+                cmd,
+                vk::PipelineStageFlags::TRANSFER,
+                vk::PipelineStageFlags::FRAGMENT_SHADER,
+                vk::DependencyFlags::empty(),
+                &[],
+                &[],
+                &[barrier_read],
+            );
+        }
+
+        mip_w = next_w;
+        mip_h = next_h;
+    }
+
+    let barrier_last = vk::ImageMemoryBarrier::default()
+        .image(image)
+        .old_layout(vk::ImageLayout::TRANSFER_DST_OPTIMAL)
+        .new_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
+        .src_access_mask(vk::AccessFlags::TRANSFER_WRITE)
+        .dst_access_mask(vk::AccessFlags::SHADER_READ)
+        .subresource_range(vk::ImageSubresourceRange {
+            aspect_mask: vk::ImageAspectFlags::COLOR,
+            base_mip_level: mip_levels - 1,
+            level_count: 1,
+            base_array_layer: 0,
+            layer_count: 6,
+        });
+
+    unsafe {
+        device.cmd_pipeline_barrier(
+            cmd,
+            vk::PipelineStageFlags::TRANSFER,
+            vk::PipelineStageFlags::FRAGMENT_SHADER,
+            vk::DependencyFlags::empty(),
+            &[],
+            &[],
+            &[barrier_last],
+        );
+        device.end_command_buffer(cmd).expect("failed to end cmd");
+    }
+
+    let cmd_buffers = [cmd];
+    let submit = vk::SubmitInfo::default().command_buffers(&cmd_buffers);
+    unsafe {
+        device.queue_submit(queue, &[submit], vk::Fence::null())
+            .expect("failed to submit cubemap upload");
+        device.queue_wait_idle(queue).expect("failed to wait for cubemap upload");
+        device.free_command_buffers(command_pool, &cmd_buffers);
+    }
+}
+
+fn create_fallback_cubemap(
     device: &ash::Device,
     allocator: &Arc<Mutex<Allocator>>,
 ) -> (vk::Image, vk::ImageView, vk::Sampler, Allocation, vk::Buffer, Allocation, bool) {
-    let pixels = vec![0u8; 4];
-    let (image, view, allocation) = util::create_gpu_image(device, allocator, 1, 1, "panorama_fallback");
-    let (staging_buffer, staging_allocation) = util::create_staging_buffer(device, allocator, &pixels, "panorama_fallback_staging");
+    let pixels = vec![0u8; 4 * 6];
+    let (image, allocation) = create_cubemap_image(device, allocator, 1, 1);
+    let view = create_cubemap_view(device, image, 1);
+    let (staging_buffer, staging_allocation) =
+        util::create_staging_buffer(device, allocator, &pixels, "panorama_fallback_staging");
 
     let sampler_info = vk::SamplerCreateInfo::default()
         .mag_filter(vk::Filter::LINEAR)
@@ -301,30 +637,6 @@ fn create_fallback_strip(
         .expect("failed to create fallback sampler");
 
     (image, view, sampler, allocation, staging_buffer, staging_allocation, false)
-}
-
-fn load_png_rgba(path: &std::path::Path) -> Option<(Vec<u8>, u32, u32)> {
-    let file = std::fs::File::open(path).ok()?;
-    let decoder = png::Decoder::new(file);
-    let mut reader = decoder.read_info().ok()?;
-    let mut buf = vec![0u8; reader.output_buffer_size()];
-    let info = reader.next_frame(&mut buf).ok()?;
-
-    let data = match info.color_type {
-        png::ColorType::Rgba => buf[..info.buffer_size()].to_vec(),
-        png::ColorType::Rgb => {
-            let pixels = info.width as usize * info.height as usize;
-            let mut rgba = Vec::with_capacity(pixels * 4);
-            for chunk in buf[..pixels * 3].chunks_exact(3) {
-                rgba.extend_from_slice(chunk);
-                rgba.push(255);
-            }
-            rgba
-        }
-        _ => return None,
-    };
-
-    Some((data, info.width, info.height))
 }
 
 fn create_pipeline(
@@ -338,16 +650,15 @@ fn create_pipeline(
     let vert_module = shader::create_shader_module(device, vert_spv);
     let frag_module = shader::create_shader_module(device, frag_spv);
 
-    let entry = c"main";
     let stages = [
         vk::PipelineShaderStageCreateInfo::default()
             .stage(vk::ShaderStageFlags::VERTEX)
             .module(vert_module)
-            .name(entry),
+            .name(c"main"),
         vk::PipelineShaderStageCreateInfo::default()
             .stage(vk::ShaderStageFlags::FRAGMENT)
             .module(frag_module)
-            .name(entry),
+            .name(c"main"),
     ];
 
     let vertex_input = vk::PipelineVertexInputStateCreateInfo::default();

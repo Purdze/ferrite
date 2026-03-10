@@ -1,8 +1,7 @@
 use std::sync::{Arc, Mutex};
 
 use ash::vk;
-use gpu_allocator::vulkan::{Allocation, AllocationCreateDesc, AllocationScheme, Allocator};
-use gpu_allocator::MemoryLocation;
+use gpu_allocator::vulkan::{Allocation, Allocator};
 
 use crate::renderer::camera::CameraUniform;
 use crate::renderer::chunk::atlas::TextureAtlas;
@@ -81,10 +80,12 @@ impl ChunkPipeline {
         let mut camera_buffers = Vec::with_capacity(MAX_FRAMES_IN_FLIGHT);
         let mut camera_allocations = Vec::with_capacity(MAX_FRAMES_IN_FLIGHT);
 
-        for i in 0..MAX_FRAMES_IN_FLIGHT {
-            let (buf, alloc) = create_uniform_buffer(device, allocator);
-            camera_buffers.push(buf);
-            camera_allocations.push(alloc);
+        for &set in &camera_sets {
+            let (buf, alloc) = util::create_uniform_buffer(
+                device, allocator,
+                std::mem::size_of::<CameraUniform>() as u64,
+                "camera_uniform",
+            );
 
             let buffer_info = [vk::DescriptorBufferInfo {
                 buffer: buf,
@@ -92,11 +93,14 @@ impl ChunkPipeline {
                 range: std::mem::size_of::<CameraUniform>() as u64,
             }];
             let write = vk::WriteDescriptorSet::default()
-                .dst_set(camera_sets[i])
+                .dst_set(set)
                 .dst_binding(0)
                 .descriptor_type(vk::DescriptorType::UNIFORM_BUFFER)
                 .buffer_info(&buffer_info);
             unsafe { device.update_descriptor_sets(&[write], &[]) };
+
+            camera_buffers.push(buf);
+            camera_allocations.push(alloc);
         }
 
         let image_info = [vk::DescriptorImageInfo {
@@ -165,41 +169,6 @@ impl ChunkPipeline {
     }
 }
 
-fn create_uniform_buffer(
-    device: &ash::Device,
-    allocator: &Arc<Mutex<Allocator>>,
-) -> (vk::Buffer, Allocation) {
-    let size = std::mem::size_of::<CameraUniform>() as u64;
-    let buffer_info = vk::BufferCreateInfo::default()
-        .size(size)
-        .usage(vk::BufferUsageFlags::UNIFORM_BUFFER)
-        .sharing_mode(vk::SharingMode::EXCLUSIVE);
-
-    let buffer = unsafe { device.create_buffer(&buffer_info, None) }
-        .expect("failed to create uniform buffer");
-    let mem_reqs = unsafe { device.get_buffer_memory_requirements(buffer) };
-
-    let allocation = allocator
-        .lock()
-        .unwrap()
-        .allocate(&AllocationCreateDesc {
-            name: "camera_uniform",
-            requirements: mem_reqs,
-            location: MemoryLocation::CpuToGpu,
-            linear: true,
-            allocation_scheme: AllocationScheme::GpuAllocatorManaged,
-        })
-        .expect("failed to allocate uniform buffer memory");
-
-    unsafe {
-        device
-            .bind_buffer_memory(buffer, allocation.memory(), allocation.offset())
-            .expect("failed to bind uniform buffer memory");
-    }
-
-    (buffer, allocation)
-}
-
 fn create_pipeline(
     device: &ash::Device,
     render_pass: vk::RenderPass,
@@ -211,16 +180,15 @@ fn create_pipeline(
     let vert_module = shader::create_shader_module(device, vert_spv);
     let frag_module = shader::create_shader_module(device, frag_spv);
 
-    let entry = c"main";
     let stages = [
         vk::PipelineShaderStageCreateInfo::default()
             .stage(vk::ShaderStageFlags::VERTEX)
             .module(vert_module)
-            .name(entry),
+            .name(c"main"),
         vk::PipelineShaderStageCreateInfo::default()
             .stage(vk::ShaderStageFlags::FRAGMENT)
             .module(frag_module)
-            .name(entry),
+            .name(c"main"),
     ];
 
     let binding_descs = [vk::VertexInputBindingDescription {

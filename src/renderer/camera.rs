@@ -51,7 +51,8 @@ impl Camera {
             -self.yaw.cos() * self.pitch.cos(),
         );
         let view = Mat4::look_to_rh(self.position, forward, UP);
-        let proj = Mat4::perspective_rh(DEFAULT_FOV, self.aspect_ratio, NEAR, FAR);
+        let mut proj = Mat4::perspective_rh(DEFAULT_FOV, self.aspect_ratio, NEAR, FAR);
+        proj.y_axis.y *= -1.0;
         proj * view
     }
 }

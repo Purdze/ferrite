@@ -1,7 +1,7 @@
 use clap::Parser;
 
 #[derive(Parser, Debug)]
-#[command(name = "ferrite", about = "Minecraft client")]
+#[command(name = "pomc", about = "Minecraft client")]
 pub struct LaunchArgs {
     #[arg(long)]
     pub username: Option<String>,
@@ -20,4 +20,7 @@ pub struct LaunchArgs {
 
     #[arg(long)]
     pub game_dir: Option<String>,
+
+    #[arg(long)]
+    pub version: Option<String>,
 }

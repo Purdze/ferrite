@@ -7,6 +7,7 @@ use gpu_allocator::MemoryLocation;
 
 use super::context::ContextError;
 
+#[allow(dead_code)]
 pub struct SwapchainState {
     pub swapchain: vk::SwapchainKHR,
     pub images: Vec<vk::Image>,
