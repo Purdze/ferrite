@@ -1,0 +1,14 @@
+name: Auto Assign Issues
+on:
+  issues:
+    types: [opened]
+
+jobs:
+  assign:
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    steps:
+      - uses: pozil/auto-assign-issue@v2
+        with:
+          assignees: Purdze
