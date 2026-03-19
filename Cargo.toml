@@ -29,7 +29,7 @@ azalea-core = "0.15"
 azalea-registry = "0.15"
 uuid = { version = "1", features = ["v4"] }
 crossbeam-channel = "0.5"
-png = "0.17"
+png = "0.18"
 image = "0.25"
 azalea-inventory = "0.15"
 rayon = "1.10"
