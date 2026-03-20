@@ -150,6 +150,11 @@ impl BlockRegistry {
             .unwrap_or(false)
     }
 
+    pub fn get_baked_model_by_name(&self, name: &str) -> Option<&model::BakedModel> {
+        let variants = self.baked.get(name)?;
+        variants.get("").or_else(|| variants.values().next())
+    }
+
     pub fn texture_names(&self) -> impl Iterator<Item = &str> + '_ {
         let face_textures = self.textures.values().flat_map(|ft| {
             let base = [

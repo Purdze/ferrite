@@ -55,6 +55,14 @@ impl AssetIndex {
         })
     }
 
+    pub fn keys_with_prefix(&self, prefix: &str) -> Vec<String> {
+        self.hashes
+            .keys()
+            .filter(|k| k.starts_with(prefix))
+            .cloned()
+            .collect()
+    }
+
     pub fn resolve(&self, asset_key: &str) -> Option<PathBuf> {
         let hash = self.hashes.get(asset_key)?;
         let path = self.objects_dir.join(&hash[..2]).join(hash);

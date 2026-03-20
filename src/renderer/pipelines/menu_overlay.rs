@@ -607,6 +607,7 @@ impl MenuOverlayPipeline {
                         *corner_radius,
                     );
                 }
+                MenuElement::BlockIcon { .. } => {}
             }
         }
 
@@ -805,6 +806,12 @@ pub enum MenuElement {
         spans: Vec<MotdSpan>,
         scale: f32,
     },
+    BlockIcon {
+        x: f32,
+        y: f32,
+        size: f32,
+        block_name: String,
+    },
     GradientRect {
         x: f32,
         y: f32,
@@ -840,6 +847,39 @@ pub enum SpriteId {
     EmptyLeggings,
     EmptyBoots,
     EmptyShield,
+    CreativeTabItems,
+    CreativeTabSearch,
+    CreativeTabInventory,
+    CreativeScroller,
+    CreativeScrollerDisabled,
+    CreativeTabTopSel1,
+    CreativeTabTopSel2,
+    CreativeTabTopSel3,
+    CreativeTabTopSel4,
+    CreativeTabTopSel5,
+    CreativeTabTopSel6,
+    CreativeTabTopSel7,
+    CreativeTabTopUnsel1,
+    CreativeTabTopUnsel2,
+    CreativeTabTopUnsel3,
+    CreativeTabTopUnsel4,
+    CreativeTabTopUnsel5,
+    CreativeTabTopUnsel6,
+    CreativeTabTopUnsel7,
+    CreativeTabBotSel1,
+    CreativeTabBotSel2,
+    CreativeTabBotSel3,
+    CreativeTabBotSel4,
+    CreativeTabBotSel5,
+    CreativeTabBotSel6,
+    CreativeTabBotSel7,
+    CreativeTabBotUnsel1,
+    CreativeTabBotUnsel2,
+    CreativeTabBotUnsel3,
+    CreativeTabBotUnsel4,
+    CreativeTabBotUnsel5,
+    CreativeTabBotUnsel6,
+    CreativeTabBotUnsel7,
 }
 
 struct SpriteRegion {
@@ -924,10 +964,37 @@ fn build_sprite_atlas(
             SpriteId::EmptyBoots,
             "minecraft/textures/gui/sprites/container/slot/boots.png",
         ),
-        (
-            SpriteId::EmptyShield,
-            "minecraft/textures/gui/sprites/container/slot/shield.png",
-        ),
+        (SpriteId::EmptyShield, "minecraft/textures/gui/sprites/container/slot/shield.png"),
+        (SpriteId::CreativeScroller, "minecraft/textures/gui/sprites/container/creative_inventory/scroller.png"),
+        (SpriteId::CreativeScrollerDisabled, "minecraft/textures/gui/sprites/container/creative_inventory/scroller_disabled.png"),
+        (SpriteId::CreativeTabTopSel1, "minecraft/textures/gui/sprites/container/creative_inventory/tab_top_selected_1.png"),
+        (SpriteId::CreativeTabTopSel2, "minecraft/textures/gui/sprites/container/creative_inventory/tab_top_selected_2.png"),
+        (SpriteId::CreativeTabTopSel3, "minecraft/textures/gui/sprites/container/creative_inventory/tab_top_selected_3.png"),
+        (SpriteId::CreativeTabTopSel4, "minecraft/textures/gui/sprites/container/creative_inventory/tab_top_selected_4.png"),
+        (SpriteId::CreativeTabTopSel5, "minecraft/textures/gui/sprites/container/creative_inventory/tab_top_selected_5.png"),
+        (SpriteId::CreativeTabTopSel6, "minecraft/textures/gui/sprites/container/creative_inventory/tab_top_selected_6.png"),
+        (SpriteId::CreativeTabTopSel7, "minecraft/textures/gui/sprites/container/creative_inventory/tab_top_selected_7.png"),
+        (SpriteId::CreativeTabTopUnsel1, "minecraft/textures/gui/sprites/container/creative_inventory/tab_top_unselected_1.png"),
+        (SpriteId::CreativeTabTopUnsel2, "minecraft/textures/gui/sprites/container/creative_inventory/tab_top_unselected_2.png"),
+        (SpriteId::CreativeTabTopUnsel3, "minecraft/textures/gui/sprites/container/creative_inventory/tab_top_unselected_3.png"),
+        (SpriteId::CreativeTabTopUnsel4, "minecraft/textures/gui/sprites/container/creative_inventory/tab_top_unselected_4.png"),
+        (SpriteId::CreativeTabTopUnsel5, "minecraft/textures/gui/sprites/container/creative_inventory/tab_top_unselected_5.png"),
+        (SpriteId::CreativeTabTopUnsel6, "minecraft/textures/gui/sprites/container/creative_inventory/tab_top_unselected_6.png"),
+        (SpriteId::CreativeTabTopUnsel7, "minecraft/textures/gui/sprites/container/creative_inventory/tab_top_unselected_7.png"),
+        (SpriteId::CreativeTabBotSel1, "minecraft/textures/gui/sprites/container/creative_inventory/tab_bottom_selected_1.png"),
+        (SpriteId::CreativeTabBotSel2, "minecraft/textures/gui/sprites/container/creative_inventory/tab_bottom_selected_2.png"),
+        (SpriteId::CreativeTabBotSel3, "minecraft/textures/gui/sprites/container/creative_inventory/tab_bottom_selected_3.png"),
+        (SpriteId::CreativeTabBotSel4, "minecraft/textures/gui/sprites/container/creative_inventory/tab_bottom_selected_4.png"),
+        (SpriteId::CreativeTabBotSel5, "minecraft/textures/gui/sprites/container/creative_inventory/tab_bottom_selected_5.png"),
+        (SpriteId::CreativeTabBotSel6, "minecraft/textures/gui/sprites/container/creative_inventory/tab_bottom_selected_6.png"),
+        (SpriteId::CreativeTabBotSel7, "minecraft/textures/gui/sprites/container/creative_inventory/tab_bottom_selected_7.png"),
+        (SpriteId::CreativeTabBotUnsel1, "minecraft/textures/gui/sprites/container/creative_inventory/tab_bottom_unselected_1.png"),
+        (SpriteId::CreativeTabBotUnsel2, "minecraft/textures/gui/sprites/container/creative_inventory/tab_bottom_unselected_2.png"),
+        (SpriteId::CreativeTabBotUnsel3, "minecraft/textures/gui/sprites/container/creative_inventory/tab_bottom_unselected_3.png"),
+        (SpriteId::CreativeTabBotUnsel4, "minecraft/textures/gui/sprites/container/creative_inventory/tab_bottom_unselected_4.png"),
+        (SpriteId::CreativeTabBotUnsel5, "minecraft/textures/gui/sprites/container/creative_inventory/tab_bottom_unselected_5.png"),
+        (SpriteId::CreativeTabBotUnsel6, "minecraft/textures/gui/sprites/container/creative_inventory/tab_bottom_unselected_6.png"),
+        (SpriteId::CreativeTabBotUnsel7, "minecraft/textures/gui/sprites/container/creative_inventory/tab_bottom_unselected_7.png"),
     ];
 
     let mut images: Vec<(SpriteId, Vec<u8>, u32, u32)> = Vec::new();
@@ -974,7 +1041,44 @@ fn build_sprite_atlas(
         }
     }
 
-    let atlas_size = 512u32;
+    let creative_bgs: &[(SpriteId, &str)] = &[
+        (
+            SpriteId::CreativeTabItems,
+            "minecraft/textures/gui/container/creative_inventory/tab_items.png",
+        ),
+        (
+            SpriteId::CreativeTabSearch,
+            "minecraft/textures/gui/container/creative_inventory/tab_item_search.png",
+        ),
+        (
+            SpriteId::CreativeTabInventory,
+            "minecraft/textures/gui/container/creative_inventory/tab_inventory.png",
+        ),
+    ];
+    for &(id, key) in creative_bgs {
+        let path = resolve_asset_path(assets_dir, asset_index, key);
+        match util::load_png(&path) {
+            Some((data, w, h)) => {
+                let crop_w = 195.min(w);
+                let crop_h = 136.min(h);
+                let mut cropped = vec![0u8; (crop_w * crop_h * 4) as usize];
+                for y in 0..crop_h {
+                    let src_off = (y * w * 4) as usize;
+                    let dst_off = (y * crop_w * 4) as usize;
+                    let row_bytes = (crop_w * 4) as usize;
+                    cropped[dst_off..dst_off + row_bytes]
+                        .copy_from_slice(&data[src_off..src_off + row_bytes]);
+                }
+                images.push((id, cropped, crop_w, crop_h));
+            }
+            None => {
+                log::warn!("Failed to load creative texture: {key}");
+                images.push((id, vec![255, 0, 255, 255], 1, 1));
+            }
+        }
+    }
+
+    let atlas_size = 1024u32;
     let mut pixels = vec![0u8; (atlas_size * atlas_size * 4) as usize];
     let mut regions = HashMap::new();
     let mut cursor_x = 0u32;
@@ -1042,7 +1146,7 @@ fn build_sprite_atlas(
     )
 }
 
-const ITEM_ATLAS_SIZE: u32 = 512;
+const ITEM_ATLAS_SIZE: u32 = 2048;
 const ITEM_TILE: u32 = 16;
 const ITEM_GRID: u32 = ITEM_ATLAS_SIZE / ITEM_TILE;
 
@@ -1065,34 +1169,56 @@ fn build_item_atlas(
     let mut regions = HashMap::new();
     let mut slot = 0u32;
 
-    let item_dir = resolve_asset_path(assets_dir, asset_index, "minecraft/textures/item/dummy.png");
-    let item_parent = item_dir.parent().unwrap_or(Path::new("."));
-
-    let block_dir = resolve_asset_path(
-        assets_dir,
-        asset_index,
-        "minecraft/textures/block/dummy.png",
-    );
-    let block_parent = block_dir.parent().unwrap_or(Path::new("."));
-
     let mut item_names: Vec<String> = Vec::new();
 
-    if let Ok(entries) = std::fs::read_dir(item_parent) {
-        for entry in entries.flatten() {
-            let fname = entry.file_name().to_string_lossy().to_string();
-            if fname.ends_with(".png") {
-                item_names.push(fname[..fname.len() - 4].to_string());
+    let scan_dirs = [
+        assets_dir
+            .join("jar")
+            .join("assets")
+            .join("minecraft")
+            .join("textures")
+            .join("item"),
+        assets_dir
+            .join("jar")
+            .join("assets")
+            .join("minecraft")
+            .join("textures")
+            .join("block"),
+    ];
+    for dir in &scan_dirs {
+        if let Ok(entries) = std::fs::read_dir(dir) {
+            for entry in entries.flatten() {
+                let fname = entry.file_name().to_string_lossy().to_string();
+                if fname.ends_with(".png") {
+                    let name = fname[..fname.len() - 4].to_string();
+                    if !item_names.contains(&name) {
+                        item_names.push(name);
+                    }
+                }
             }
         }
     }
 
-    if let Ok(entries) = std::fs::read_dir(block_parent) {
-        for entry in entries.flatten() {
-            let fname = entry.file_name().to_string_lossy().to_string();
-            if fname.ends_with(".png") {
-                let name = fname[..fname.len() - 4].to_string();
-                if !item_names.contains(&name) {
-                    item_names.push(name);
+    if item_names.is_empty() {
+        if let Some(idx) = asset_index {
+            for key in idx.keys_with_prefix("minecraft/textures/item/") {
+                if let Some(name) = key
+                    .strip_prefix("minecraft/textures/item/")
+                    .and_then(|s| s.strip_suffix(".png"))
+                {
+                    if !name.is_empty() {
+                        item_names.push(name.to_string());
+                    }
+                }
+            }
+            for key in idx.keys_with_prefix("minecraft/textures/block/") {
+                if let Some(name) = key
+                    .strip_prefix("minecraft/textures/block/")
+                    .and_then(|s| s.strip_suffix(".png"))
+                {
+                    if !name.is_empty() && !item_names.contains(&name.to_string()) {
+                        item_names.push(name.to_string());
+                    }
                 }
             }
         }
@@ -1106,15 +1232,28 @@ fn build_item_atlas(
             break;
         }
 
-        let item_path = item_parent.join(format!("{name}.png"));
-        let block_path = block_parent.join(format!("{name}.png"));
-        let path = if item_path.exists() {
-            &item_path
+        let jar_item = assets_dir
+            .join("jar/assets/minecraft/textures/item")
+            .join(format!("{name}.png"));
+        let jar_block = assets_dir
+            .join("jar/assets/minecraft/textures/block")
+            .join(format!("{name}.png"));
+        let path = if jar_item.exists() {
+            jar_item
+        } else if jar_block.exists() {
+            jar_block
         } else {
-            &block_path
+            let item_key = format!("minecraft/textures/item/{name}.png");
+            let block_key = format!("minecraft/textures/block/{name}.png");
+            let p = resolve_asset_path(assets_dir, asset_index, &item_key);
+            if p.exists() {
+                p
+            } else {
+                resolve_asset_path(assets_dir, asset_index, &block_key)
+            }
         };
 
-        let img = match crate::assets::load_image(path) {
+        let img = match crate::assets::load_image(&path) {
             Ok(img) => img.to_rgba8(),
             Err(_) => continue,
         };

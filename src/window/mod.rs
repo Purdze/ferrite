@@ -474,7 +474,7 @@ impl App {
             self.send_position_packet();
         }
 
-        if !self.paused && !self.inventory_open && !self.chat.is_open() {
+        if !self.paused && !self.inventory_open && !self.creative_open && !self.chat.is_open() {
             let eye_pos = self.player.position + glam::Vec3::new(0.0, 1.62, 0.0);
             self.interaction.update_target(
                 eye_pos,
@@ -714,7 +714,8 @@ impl ApplicationHandler for App {
                                 KeyCode::KeyT | KeyCode::Enter
                                     if !self.paused
                                         && !self.chat.is_open()
-                                        && !self.inventory_open =>
+                                        && !self.inventory_open
+                                        && !self.creative_open =>
                                 {
                                     self.chat.open();
                                     self.apply_cursor_grab();
@@ -722,7 +723,8 @@ impl ApplicationHandler for App {
                                 KeyCode::Slash
                                     if !self.paused
                                         && !self.chat.is_open()
-                                        && !self.inventory_open =>
+                                        && !self.inventory_open
+                                        && !self.creative_open =>
                                 {
                                     self.chat.open_with_slash();
                                     self.apply_cursor_grab();
@@ -952,7 +954,11 @@ impl ApplicationHandler for App {
                                 }
                             }
 
-                            if !self.paused && !self.inventory_open && !self.chat.is_open() {
+                            if !self.paused
+                                && !self.inventory_open
+                                && !self.creative_open
+                                && !self.chat.is_open()
+                            {
                                 if let Some(renderer) = &mut self.renderer {
                                     renderer.update_camera(&mut self.input);
                                 }
@@ -968,7 +974,11 @@ impl ApplicationHandler for App {
                             let interp_pos = self.prev_player_pos.lerp(self.player.position, alpha);
                             let eye_pos = interp_pos + glam::Vec3::new(0.0, 1.62, 0.0);
 
-                            if !self.paused && !self.inventory_open && !self.chat.is_open() {
+                            if !self.paused
+                                && !self.inventory_open
+                                && !self.creative_open
+                                && !self.chat.is_open()
+                            {
                                 let (yaw, pitch) = if let Some(r) = &self.renderer {
                                     (r.camera_yaw(), r.camera_pitch())
                                 } else {
@@ -1015,6 +1025,7 @@ impl ApplicationHandler for App {
                                 let mut elements: Vec<MenuElement> = Vec::new();
                                 let hide_cursor = !self.paused
                                     && !self.inventory_open
+                                    && !self.creative_open
                                     && !self.chat.is_open()
                                     && self.input.is_cursor_captured();
 
@@ -1098,6 +1109,7 @@ impl ApplicationHandler for App {
                                         scroll,
                                         self.input.selected_slot(),
                                         gs,
+                                        &self.player.inventory,
                                     );
                                     if let Some((slot, kind)) = result.picked {
                                         let item = azalea_inventory::ItemStack::Present(

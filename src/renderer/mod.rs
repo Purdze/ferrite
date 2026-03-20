@@ -24,6 +24,7 @@ use chunk::atlas::TextureAtlas;
 use chunk::buffer::ChunkBufferStore;
 use chunk::mesher::{ChunkMeshData, MeshDispatcher};
 use context::VulkanContext;
+use pipelines::block_icon_pipeline::BlockIconPipeline;
 use pipelines::block_overlay::BlockOverlayPipeline;
 use pipelines::blur::BlurPipeline;
 use pipelines::chunk::ChunkPipeline;
@@ -74,6 +75,7 @@ pub struct Renderer {
     sky_pipeline: SkyPipeline,
     panorama_pipeline: PanoramaPipeline,
     menu_pipeline: MenuOverlayPipeline,
+    block_icon_pipeline: BlockIconPipeline,
     blur_pipeline: BlurPipeline,
     skin_preview: SkinPreviewPipeline,
     chunk_buffers: ChunkBufferStore,
@@ -150,6 +152,13 @@ impl Renderer {
             asset_index,
             &texture_names,
         )?;
+
+        let block_icon_pipeline = BlockIconPipeline::new(
+            &ctx.device,
+            swapchain_state.render_pass,
+            &ctx.allocator,
+            &atlas,
+        );
 
         splash(&mut menu_pipeline, 0.5, "Creating pipelines...");
 
@@ -234,6 +243,7 @@ impl Renderer {
             sky_pipeline,
             panorama_pipeline,
             menu_pipeline,
+            block_icon_pipeline,
             blur_pipeline,
             skin_preview,
             chunk_buffers,
@@ -454,6 +464,8 @@ impl Renderer {
             .recreate_pipeline(&self.ctx.device, self.swapchain.render_pass);
         self.menu_pipeline
             .recreate_pipeline(&self.ctx.device, self.swapchain.render_pass);
+        self.block_icon_pipeline
+            .recreate_pipeline(&self.ctx.device, self.swapchain.render_pass);
         self.skin_preview
             .recreate_pipeline(&self.ctx.device, self.swapchain.render_pass);
         self.blur_pipeline.resize(
@@ -599,6 +611,41 @@ impl Renderer {
 
     pub fn trigger_skin_swing(&mut self) {
         self.skin_preview.trigger_swing();
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn draw_block_icons_inline(
+        block_icon_pipeline: &mut BlockIconPipeline,
+        registry: &crate::world::block::registry::BlockRegistry,
+        atlas_uv_map: &crate::renderer::chunk::atlas::AtlasUVMap,
+        device: &ash::Device,
+        cmd: vk::CommandBuffer,
+        sw: f32,
+        sh: f32,
+        elements: &[MenuElement],
+    ) {
+        let mut requests = Vec::new();
+        for elem in elements {
+            if let MenuElement::BlockIcon {
+                x,
+                y,
+                size,
+                block_name,
+            } = elem
+            {
+                if let Some(model) = registry.get_baked_model_by_name(block_name) {
+                    requests.push(pipelines::block_icon_pipeline::BlockIconRequest {
+                        screen_x: *x,
+                        screen_y: *y,
+                        size: *size,
+                        quads: &model.quads,
+                    });
+                }
+            }
+        }
+        if !requests.is_empty() {
+            block_icon_pipeline.draw(device, cmd, sw, sh, &requests, atlas_uv_map);
+        }
     }
 
     pub fn menu_text_width(&self, text: &str, scale: f32) -> f32 {
@@ -792,8 +839,38 @@ impl Renderer {
                         *swing_progress,
                     );
 
+                    let clear_depth = vk::ClearAttachment {
+                        aspect_mask: vk::ImageAspectFlags::DEPTH,
+                        color_attachment: 0,
+                        clear_value: vk::ClearValue {
+                            depth_stencil: vk::ClearDepthStencilValue {
+                                depth: 1.0,
+                                stencil: 0,
+                            },
+                        },
+                    };
+                    let clear_rect = vk::ClearRect {
+                        rect: scissor,
+                        base_array_layer: 0,
+                        layer_count: 1,
+                    };
                     self.menu_pipeline
                         .draw(&self.ctx.device, cmd, sw, sh, overlay);
+
+                    self.ctx
+                        .device
+                        .cmd_clear_attachments(cmd, &[clear_depth], &[clear_rect]);
+
+                    Self::draw_block_icons_inline(
+                        &mut self.block_icon_pipeline,
+                        &self.registry,
+                        &self.atlas.uv_map,
+                        &self.ctx.device,
+                        cmd,
+                        sw,
+                        sh,
+                        overlay,
+                    );
                 }
                 RenderMode::MainMenu {
                     scroll,
@@ -921,6 +998,8 @@ impl Drop for Renderer {
         self.panorama_pipeline
             .destroy(&self.ctx.device, &self.ctx.allocator);
         self.menu_pipeline
+            .destroy(&self.ctx.device, &self.ctx.allocator);
+        self.block_icon_pipeline
             .destroy(&self.ctx.device, &self.ctx.allocator);
         self.blur_pipeline
             .destroy(&self.ctx.device, &self.ctx.allocator);

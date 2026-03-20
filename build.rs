@@ -29,6 +29,8 @@ fn main() {
         ("sky.vert", shaderc::ShaderKind::Vertex),
         ("sky.frag", shaderc::ShaderKind::Fragment),
         ("cull.comp", shaderc::ShaderKind::Compute),
+        ("block_icon.vert", shaderc::ShaderKind::Vertex),
+        ("block_icon.frag", shaderc::ShaderKind::Fragment),
         ("blur.vert", shaderc::ShaderKind::Vertex),
         ("blur.frag", shaderc::ShaderKind::Fragment),
     ];
