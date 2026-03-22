@@ -12,14 +12,21 @@ const Log = ({ log }: { log: string }) => {
   let start_str = split[0];
   let message = split[1];
 
-  let type = "INFO";
+  let type = "";
 
-  for (const tag of ["WARN", "INFO", "DEBUG"]) {
+  for (const tag of ["WARN", "INFO", "DEBUG", "ERROR"]) {
     if (start_str.includes(tag)) {
       type = tag;
     }
   }
 
+  if (type === "") {
+    return (
+      <p className="console-log">
+        {log}
+      </p>
+    )
+  }
   return (
     <p className="console-log">
       <span className={`console-text-${type.toLowerCase()}`}>{start_str}]</span>
