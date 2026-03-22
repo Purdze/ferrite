@@ -1,7 +1,10 @@
 use serde::{Deserialize, Serialize};
-use tauri::{AppHandle, Emitter, Manager, State, WebviewUrl, WebviewWindowBuilder};
-use tokio::{io::{AsyncBufReadExt, BufReader}, sync::Mutex};
 use std::process::Stdio;
+use tauri::{AppHandle, Emitter, Manager, State, WebviewUrl, WebviewWindowBuilder};
+use tokio::{
+    io::{AsyncBufReadExt, BufReader},
+    sync::Mutex,
+};
 
 #[derive(Deserialize)]
 struct MojangPatchNotes {
@@ -223,7 +226,12 @@ pub async fn ensure_assets(app: tauri::AppHandle, version: String) -> Result<(),
 }
 
 #[tauri::command]
-pub async fn launch_game(app: AppHandle, uuid: Option<String>, server: Option<String>, debug_enabled: Option<bool>) -> Result<String, String> {
+pub async fn launch_game(
+    app: AppHandle,
+    uuid: Option<String>,
+    server: Option<String>,
+    debug_enabled: Option<bool>,
+) -> Result<String, String> {
     let exe = find_client_binary()?;
     let assets = crate::downloader::assets_dir();
 
@@ -252,7 +260,7 @@ pub async fn launch_game(app: AppHandle, uuid: Option<String>, server: Option<St
                 WebviewWindowBuilder::new(
                     &app,
                     format!("console"),
-                    WebviewUrl::App("console".into())
+                    WebviewUrl::App("console".into()),
                 )
                 .title("POMC Debugger")
                 .decorations(false)
@@ -264,8 +272,6 @@ pub async fn launch_game(app: AppHandle, uuid: Option<String>, server: Option<St
             }
         }
     }
-
-
 
     cmd.arg("--username")
         .arg(&username)
@@ -288,13 +294,17 @@ pub async fn launch_game(app: AppHandle, uuid: Option<String>, server: Option<St
 
     let mut child = cmd.spawn().map_err(|e| e.to_string())?;
 
-    let stderr = child.stderr.take()
+    let stderr = child
+        .stderr
+        .take()
         .expect("couldn't take stderr from game process");
 
     let mut reader = BufReader::new(stderr).lines();
 
     tokio::spawn(async move {
-        let status = child.wait().await
+        let status = child
+            .wait()
+            .await
             .expect("client process encountered an error");
 
         println!("client status was: {}", status);
@@ -306,12 +316,14 @@ pub async fn launch_game(app: AppHandle, uuid: Option<String>, server: Option<St
         loop {
             match reader.next_line().await {
                 Ok(Some(line)) => {
-                    let _ = app.emit("console_message", line.clone()).map_err(|e| e.to_string());
+                    let _ = app
+                        .emit("console_message", line.clone())
+                        .map_err(|e| e.to_string());
                     let state = app_handle.state::<Mutex<crate::AppState>>();
                     let mut state = state.lock().await;
 
                     state.client_logs.push(line);
-                },
+                }
                 Ok(None) => break,
                 Err(e) => {
                     eprintln!("reader error: {}", e);

@@ -9,7 +9,7 @@ mod downloader;
 
 #[derive(Default)]
 struct AppState {
-    client_logs: Vec<String>
+    client_logs: Vec<String>,
 }
 
 fn main() {
