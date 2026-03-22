@@ -254,6 +254,7 @@ pub async fn launch_game(
 
     if debug_enabled.unwrap_or(false) {
         cmd.env("RUST_LOG", "debug");
+        cmd.env("RUST_BACKTRACE", "1");
 
         match app.webview_windows().get("console") {
             None => {
