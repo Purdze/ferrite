@@ -1,4 +1,7 @@
 use serde::{Deserialize, Serialize};
+use tauri::{AppHandle, Emitter, Manager, State, WebviewUrl, WebviewWindowBuilder};
+use tokio::{io::{AsyncBufReadExt, BufReader}, sync::Mutex};
+use std::process::Stdio;
 
 #[derive(Deserialize)]
 struct MojangPatchNotes {
@@ -220,7 +223,7 @@ pub async fn ensure_assets(app: tauri::AppHandle, version: String) -> Result<(),
 }
 
 #[tauri::command]
-pub async fn launch_game(uuid: Option<String>, server: Option<String>) -> Result<String, String> {
+pub async fn launch_game(app: AppHandle, uuid: Option<String>, server: Option<String>, debug_enabled: Option<bool>) -> Result<String, String> {
     let exe = find_client_binary()?;
     let assets = crate::downloader::assets_dir();
 
@@ -238,6 +241,32 @@ pub async fn launch_game(uuid: Option<String>, server: Option<String>) -> Result
     std::fs::write(&token_path, &token).map_err(|e| e.to_string())?;
 
     let mut cmd = tokio::process::Command::new(&exe);
+
+    cmd.stderr(Stdio::piped());
+
+    if debug_enabled.unwrap_or(true) {
+        cmd.env("RUST_LOG", "debug");
+
+        match app.webview_windows().get("console") {
+            None => {
+                WebviewWindowBuilder::new(
+                    &app,
+                    format!("console"),
+                    WebviewUrl::App("console".into())
+                )
+                .title("POMC Debugger")
+                .decorations(false)
+                .build()
+                .unwrap();
+            }
+            Some(window) => {
+                window.set_focus().expect("failed to focus window");
+            }
+        }
+    }
+
+
+
     cmd.arg("--username")
         .arg(&username)
         .arg("--assets-dir")
@@ -257,9 +286,49 @@ pub async fn launch_game(uuid: Option<String>, server: Option<String>) -> Result
     #[cfg(unix)]
     cmd.process_group(0);
 
-    cmd.spawn().map_err(|e| e.to_string())?;
+    let mut child = cmd.spawn().map_err(|e| e.to_string())?;
+
+    let stderr = child.stderr.take()
+        .expect("couldn't take stderr from game process");
+
+    let mut reader = BufReader::new(stderr).lines();
+
+    tokio::spawn(async move {
+        let status = child.wait().await
+            .expect("client process encountered an error");
+
+        println!("client status was: {}", status);
+    });
+
+    let app_handle = app.clone();
+
+    tokio::spawn(async move {
+        loop {
+            match reader.next_line().await {
+                Ok(Some(line)) => {
+                    let _ = app.emit("console_message", line.clone()).map_err(|e| e.to_string());
+                    let state = app_handle.state::<Mutex<crate::AppState>>();
+                    let mut state = state.lock().await;
+
+                    state.client_logs.push(line);
+                },
+                Ok(None) => break,
+                Err(e) => {
+                    eprintln!("reader error: {}", e);
+                    break;
+                }
+            }
+        }
+    });
 
     Ok(format!("Launched as {username}"))
+}
+
+#[tauri::command]
+pub async fn get_client_logs(state: State<'_, Mutex<crate::AppState>>) -> Result<Vec<String>, ()> {
+    let state = state.lock().await;
+
+    Ok(state.client_logs.clone())
 }
 
 fn find_client_binary() -> Result<std::path::PathBuf, String> {

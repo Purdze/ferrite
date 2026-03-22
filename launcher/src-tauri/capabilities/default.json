@@ -1,7 +1,7 @@
 {
   "identifier": "default",
   "description": "Default capabilities for the launcher",
-  "windows": ["main"],
+  "windows": ["main", "console"],
   "permissions": [
     "core:default",
     "core:window:allow-close",

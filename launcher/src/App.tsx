@@ -20,6 +20,7 @@ import ServersPage from "./pages/Servers";
 import FriendsPage from "./pages/Friends";
 import NewsPage from "./pages/News";
 import SettingsPage from "./pages/Settings";
+import Titlebar from "./components/Titlebar";
 
 function App() {
   const {
@@ -64,16 +65,6 @@ function App() {
       console.error("Failed to fetch content:", e);
     }
   }, []);
-
-  const minimize = () => {
-    appWindow.minimize();
-  };
-  const toggleMaximize = () => {
-    appWindow.toggleMaximize();
-  };
-  const close = () => {
-    appWindow.close();
-  };
 
   const loadSkin = useCallback((uuid: string) => {
     invoke<string>("get_skin_url", { uuid })
@@ -160,28 +151,7 @@ function App() {
 
   return (
     <div className="app">
-      <div className="titlebar" data-tauri-drag-region>
-        <div className="titlebar-left" data-tauri-drag-region>
-          <span className="titlebar-icon"><HiCube /></span>
-        </div>
-        <span className="titlebar-title" data-tauri-drag-region>
-          POMC Launcher
-        </span>
-        <div className="titlebar-controls">
-          <button className="tb-btn" onClick={minimize}>
-            <HiMinus />
-          </button>
-          <button className="tb-btn" onClick={toggleMaximize}>
-            <HiSquare2Stack />
-          </button>
-          <button
-            className="tb-btn tb-close"
-            onClick={close}
-          >
-            <HiXMark />
-          </button>
-        </div>
-      </div>
+      <Titlebar />
 
       <div className="layout">
         <Navbar
