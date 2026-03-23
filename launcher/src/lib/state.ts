@@ -9,7 +9,7 @@ const useAppState = () => {
 
   const [server] = useState("");
   const [keepOpen, setKeepOpen] = useState(true);
-  const [useConsole, setUseConsole] = useState(true);
+  const [useConsole, setUseConsole] = useState(false);
 
   const [modView, setModView] = useState<"list" | "grid">("list");
   const [modSearch, setModSearch] = useState("");

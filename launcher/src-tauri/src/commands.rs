@@ -336,7 +336,6 @@ pub async fn launch_game(
 
     let app_handle = app.clone();
 
-    // TODO: switch to using a Channel instead of a event stream, see https://v2.tauri.app/develop/calling-frontend/#channels
     tokio::spawn(async move {
         loop {
             match reader.next_line().await {

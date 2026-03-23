@@ -1,8 +1,6 @@
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { HiCube, HiMinus, HiSquare2Stack, HiXMark } from "react-icons/hi2"
 
-
-// name is used because this component is also used in `src/components/Console.tsx`
 export default function Titlebar({ name }: { name?: string } = { name: "POMC Launcher" }) {
   const appWindow = getCurrentWindow();
 
