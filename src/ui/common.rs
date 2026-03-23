@@ -1,12 +1,11 @@
-use crate::renderer::pipelines::menu_overlay::MenuElement;
+use crate::renderer::pipelines::menu_overlay::{MenuElement, SpriteId};
 
 pub const WHITE: [f32; 4] = [1.0, 1.0, 1.0, 1.0];
 pub const FONT_SIZE: f32 = 8.0;
 pub const BTN_H: f32 = 20.0;
 pub const BTN_NORMAL: [f32; 4] = [0.12, 0.13, 0.22, 0.7];
-pub const BTN_HOVER: [f32; 4] = [0.18, 0.20, 0.35, 0.85];
-pub const BTN_DISABLED: [f32; 4] = [0.08, 0.08, 0.14, 0.6];
 pub const COL_DISABLED: [f32; 4] = [0.35, 0.36, 0.45, 1.0];
+const BTN_BORDER: f32 = 3.0;
 
 pub fn push_overlay(elements: &mut Vec<MenuElement>, screen_w: f32, screen_h: f32, alpha: f32) {
     elements.push(MenuElement::Rect {
@@ -41,25 +40,27 @@ pub fn push_button(
 ) -> bool {
     let hovered = enabled && hit_test(cursor, [x, y, w, h]);
 
-    let (bg, text_col) = if !enabled {
-        (BTN_DISABLED, COL_DISABLED)
+    let (sprite, text_col) = if !enabled {
+        (SpriteId::ButtonDisabled, COL_DISABLED)
     } else if hovered {
-        (BTN_HOVER, WHITE)
+        (SpriteId::ButtonHover, WHITE)
     } else {
-        (BTN_NORMAL, WHITE)
+        (SpriteId::ButtonNormal, WHITE)
     };
 
-    elements.push(MenuElement::Rect {
+    elements.push(MenuElement::NineSlice {
         x,
         y,
         w,
         h,
-        corner_radius: 4.0 * gs,
-        color: bg,
+        sprite,
+        border: BTN_BORDER * gs,
+        tint: WHITE,
     });
+
     elements.push(MenuElement::Text {
         x: x + w / 2.0,
-        y: y + (h - fs) / 2.0,
+        y: y + (h - fs) / 2.0 + 1.0,
         text: label.into(),
         scale: fs,
         color: text_col,

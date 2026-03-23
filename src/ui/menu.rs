@@ -678,7 +678,7 @@ impl MainMenu {
                         }
                     }
                     ICON_GEAR => {
-                        self.screen = Screen::Options;
+                        self.open_options();
                     }
                     ICON_PAINTBRUSH => {
                         self.theme_open = !self.theme_open;
@@ -2481,6 +2481,7 @@ fn push_server_status(
                 y: motd_y,
                 spans: motd.clone(),
                 scale: fs,
+                centered: false,
             });
 
             let player_text = format!("{online}/{max}");

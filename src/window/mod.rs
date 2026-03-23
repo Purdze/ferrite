@@ -881,14 +881,6 @@ impl ApplicationHandler for App {
                                     self.apply_display_mode();
                                 }
 
-                                if self.options_from_game && !self.menu.is_options_screen() {
-                                    self.state = GameState::InGame;
-                                    self.paused = true;
-                                    self.options_from_game = false;
-                                    self.apply_cursor_grab();
-                                    break 'redraw;
-                                }
-
                                 if result.clicked_button {
                                     if let Some(renderer) = &mut self.renderer {
                                         renderer.trigger_skin_swing();
@@ -1110,7 +1102,26 @@ impl ApplicationHandler for App {
                                     self.menu.gui_scale_setting,
                                 );
 
-                                if self.paused {
+                                if self.options_from_game {
+                                    let menu_input = MenuInput {
+                                        cursor: self.input.cursor_pos(),
+                                        clicked: self.input.left_just_pressed(),
+                                        mouse_held: self.input.left_held(),
+                                        typed_chars: self.input.drain_typed_chars(),
+                                        backspace: self.input.backspace_pressed(),
+                                        enter: self.input.enter_pressed(),
+                                        escape: self.input.escape_pressed(),
+                                        tab: self.input.tab_pressed(),
+                                        f5: self.input.f5_pressed(),
+                                        scroll_delta: self.input.consume_menu_scroll(),
+                                    };
+                                    let r = &*renderer;
+                                    let result = self
+                                        .menu
+                                        .build(sw, sh, &menu_input, |t, s| r.menu_text_width(t, s));
+                                    elements.extend(result.elements);
+                                    self.input.clear_click_events();
+                                } else if self.paused {
                                     let cursor = self.input.cursor_pos();
                                     let clicked = self.input.left_just_pressed();
                                     pause_action = pause::build_pause_menu(
@@ -1177,14 +1188,25 @@ impl ApplicationHandler for App {
                                 }
                                 PauseAction::Options => {
                                     self.menu.open_options();
-                                    self.state = GameState::Menu;
                                     self.options_from_game = true;
+                                    self.paused = false;
                                     self.apply_cursor_grab();
                                 }
                                 PauseAction::Disconnect => {
                                     self.disconnect_to_menu(None);
                                 }
                                 PauseAction::None => {}
+                            }
+
+                            if self.options_from_game {
+                                if self.menu.render_distance != self.last_render_distance {
+                                    self.sync_render_distance();
+                                }
+                                if !self.menu.is_options_screen() {
+                                    self.options_from_game = false;
+                                    self.paused = true;
+                                    self.apply_cursor_grab();
+                                }
                             }
                         }
                     }

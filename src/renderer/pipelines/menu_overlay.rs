@@ -47,9 +47,6 @@ struct GlyphEntry {
     v1: f32,
     width_px: f32,
     height_px: f32,
-    x_offset: f32,
-    y_offset: f32,
-    advance: f32,
 }
 
 struct FontAtlas {
@@ -121,9 +118,6 @@ fn build_font_atlas() -> FontAtlas {
                 v1: (cursor_y + metrics.height as u32) as f32 * inv,
                 width_px: metrics.width as f32,
                 height_px: metrics.height as f32,
-                x_offset: metrics.xmin as f32,
-                y_offset: metrics.ymin as f32,
-                advance: metrics.advance_width,
             },
         );
 
@@ -510,20 +504,22 @@ impl MenuOverlayPipeline {
                     color,
                     centered,
                 } => {
-                    let start_x = if *centered {
-                        *x - self.text_width(text, *scale) / 2.0
-                    } else {
-                        *x
-                    };
-                    push_text_glyphs(
-                        &mut vertices,
-                        &self.atlas,
-                        start_x,
-                        *y,
-                        text,
-                        *scale,
-                        *color,
-                    );
+                    if let Some(ref gm) = self.mc_glyph_map {
+                        let start_x = if *centered {
+                            *x - self.mc_text_width(text, *scale) / 2.0
+                        } else {
+                            *x
+                        };
+                        let span = MotdSpan {
+                            text: text.clone(),
+                            color: *color,
+                            bold: false,
+                            italic: false,
+                            strikethrough: false,
+                            underline: false,
+                        };
+                        push_mc_text(&mut vertices, gm, start_x, *y, &[span], *scale);
+                    }
                 }
                 MenuElement::Icon {
                     x,
@@ -546,6 +542,19 @@ impl MenuOverlayPipeline {
                         push_textured_quad(&mut vertices, *x, *y, *w, *h, region, *tint, 2.0);
                     }
                 }
+                MenuElement::NineSlice {
+                    x,
+                    y,
+                    w,
+                    h,
+                    sprite,
+                    border,
+                    tint,
+                } => {
+                    if let Some(region) = self.sprite_atlas.regions.get(sprite) {
+                        push_nine_slice(&mut vertices, *x, *y, *w, *h, region, *border, *tint);
+                    }
+                }
                 MenuElement::ItemIcon {
                     x,
                     y,
@@ -558,9 +567,24 @@ impl MenuOverlayPipeline {
                         push_textured_quad(&mut vertices, *x, *y, *w, *h, region, *tint, 3.0);
                     }
                 }
-                MenuElement::McText { x, y, spans, scale } => {
+                MenuElement::McText {
+                    x,
+                    y,
+                    spans,
+                    scale,
+                    centered,
+                } => {
                     if let Some(ref gm) = self.mc_glyph_map {
-                        push_mc_text(&mut vertices, gm, *x, *y, spans, *scale);
+                        let start_x = if *centered {
+                            let total: f32 = spans
+                                .iter()
+                                .map(|s| self.mc_text_width(&s.text, *scale))
+                                .sum();
+                            *x - total / 2.0
+                        } else {
+                            *x
+                        };
+                        push_mc_text(&mut vertices, gm, start_x, *y, spans, *scale);
                     }
                 }
                 MenuElement::GradientRect {
@@ -658,14 +682,9 @@ impl MenuOverlayPipeline {
     }
 
     pub fn text_width(&self, text: &str, scale: f32) -> f32 {
-        let s = scale / RASTER_PX;
-        text.chars()
-            .filter_map(|ch| self.atlas.glyphs.get(&ch))
-            .map(|g| g.advance * s)
-            .sum()
+        self.mc_text_width(text, scale)
     }
 
-    #[allow(dead_code)]
     pub fn mc_text_width(&self, text: &str, scale: f32) -> f32 {
         let Some(ref gm) = self.mc_glyph_map else {
             return 0.0;
@@ -791,6 +810,15 @@ pub enum MenuElement {
         sprite: SpriteId,
         tint: [f32; 4],
     },
+    NineSlice {
+        x: f32,
+        y: f32,
+        w: f32,
+        h: f32,
+        sprite: SpriteId,
+        border: f32,
+        tint: [f32; 4],
+    },
     ItemIcon {
         x: f32,
         y: f32,
@@ -804,6 +832,7 @@ pub enum MenuElement {
         y: f32,
         spans: Vec<MotdSpan>,
         scale: f32,
+        centered: bool,
     },
     GradientRect {
         x: f32,
@@ -840,6 +869,9 @@ pub enum SpriteId {
     EmptyLeggings,
     EmptyBoots,
     EmptyShield,
+    ButtonNormal,
+    ButtonHover,
+    ButtonDisabled,
 }
 
 struct SpriteRegion {
@@ -927,6 +959,18 @@ fn build_sprite_atlas(
         (
             SpriteId::EmptyShield,
             "minecraft/textures/gui/sprites/container/slot/shield.png",
+        ),
+        (
+            SpriteId::ButtonNormal,
+            "minecraft/textures/gui/sprites/widget/button.png",
+        ),
+        (
+            SpriteId::ButtonHover,
+            "minecraft/textures/gui/sprites/widget/button_highlighted.png",
+        ),
+        (
+            SpriteId::ButtonDisabled,
+            "minecraft/textures/gui/sprites/widget/button_disabled.png",
         ),
     ];
 
@@ -1347,45 +1391,6 @@ fn push_gradient_rect(
     }
 }
 
-fn push_text_glyphs(
-    verts: &mut Vec<Vertex>,
-    atlas: &FontAtlas,
-    mut x: f32,
-    y: f32,
-    text: &str,
-    scale: f32,
-    color: [f32; 4],
-) {
-    let s = scale / RASTER_PX;
-    for ch in text.chars() {
-        let Some(g) = atlas.glyphs.get(&ch) else {
-            continue;
-        };
-        if g.width_px > 0.0 && g.height_px > 0.0 {
-            let gw = g.width_px * s;
-            let gh = g.height_px * s;
-            let gx = x + g.x_offset * s;
-            let gy = y + scale - g.y_offset * s - gh;
-            push_quad(
-                verts,
-                gx,
-                gy,
-                gw,
-                gh,
-                g.u0,
-                g.v0,
-                g.u1,
-                g.v1,
-                color,
-                1.0,
-                [0.0, 0.0],
-                0.0,
-            );
-        }
-        x += g.advance * s;
-    }
-}
-
 fn push_icon_glyph(
     verts: &mut Vec<Vertex>,
     atlas: &FontAtlas,
@@ -1444,6 +1449,57 @@ fn push_textured_quad(
         [0.0, 0.0],
         0.0,
     );
+}
+
+#[allow(clippy::too_many_arguments)]
+fn push_nine_slice(
+    verts: &mut Vec<Vertex>,
+    x: f32,
+    y: f32,
+    w: f32,
+    h: f32,
+    region: &SpriteRegion,
+    border: f32,
+    tint: [f32; 4],
+) {
+    let tex_w = region.u1 - region.u0;
+    let tex_h = region.v1 - region.v0;
+    let frac_x = 3.0 / 200.0;
+    let frac_y = 3.0 / 20.0;
+    let bu = frac_x * tex_w;
+    let bv = frac_y * tex_h;
+
+    let xs = [x, x + border, x + w - border, x + w];
+    let ys = [y, y + border, y + h - border, y + h];
+    let us = [region.u0, region.u0 + bu, region.u1 - bu, region.u1];
+    let vs = [region.v0, region.v0 + bv, region.v1 - bv, region.v1];
+
+    for row in 0..3 {
+        for col in 0..3 {
+            let qx = xs[col];
+            let qy = ys[row];
+            let qw = xs[col + 1] - xs[col];
+            let qh = ys[row + 1] - ys[row];
+            if qw <= 0.0 || qh <= 0.0 {
+                continue;
+            }
+            push_quad(
+                verts,
+                qx,
+                qy,
+                qw,
+                qh,
+                us[col],
+                vs[row],
+                us[col + 1],
+                vs[row + 1],
+                tint,
+                2.0,
+                [0.0, 0.0],
+                0.0,
+            );
+        }
+    }
 }
 
 fn push_mc_text(
