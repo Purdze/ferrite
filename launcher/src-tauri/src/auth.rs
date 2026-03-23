@@ -191,7 +191,7 @@ pub async fn oauth_sign_in() -> Result<AuthAccount, String> {
     let code = listen_for_callback(&state).await?;
 
     let client = reqwest::Client::new();
-    let msa: MsaTokenResponse = client
+    let resp = client
         .post("https://login.microsoftonline.com/consumers/oauth2/v2.0/token")
         .form(&[
             ("client_id", CLIENT_ID),
@@ -203,10 +203,20 @@ pub async fn oauth_sign_in() -> Result<AuthAccount, String> {
         ])
         .send()
         .await
-        .map_err(|e| format!("Token exchange failed: {e}"))?
-        .json()
+        .map_err(|e| format!("Token exchange failed: {e}"))?;
+
+    let status = resp.status();
+    let body = resp
+        .text()
         .await
-        .map_err(|e| format!("Token parse failed: {e}"))?;
+        .map_err(|e| format!("Token exchange read failed: {e}"))?;
+
+    if !status.is_success() {
+        return Err(format!("Auth failed ({status}): {body}"));
+    }
+
+    let msa: MsaTokenResponse =
+        serde_json::from_str(&body).map_err(|e| format!("Token parse failed: {e}"))?;
 
     finish_msa_exchange(&client, &msa).await
 }
