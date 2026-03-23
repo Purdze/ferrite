@@ -255,6 +255,9 @@ pub async fn launch_game(uuid: Option<String>, server: Option<String>) -> Result
         cmd.arg("--server").arg(server);
     }
 
+    #[cfg(unix)]
+    cmd.process_group(0);
+
     cmd.spawn().map_err(|e| e.to_string())?;
 
     Ok(format!("Launched as {username}"))
