@@ -1,5 +1,7 @@
+use crate::storage;
+
 use serde::Deserialize;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use tauri::{AppHandle, Emitter};
 
 const VERSION_MANIFEST_URL: &str =
@@ -59,41 +61,20 @@ pub struct DownloadProgress {
     pub status: String,
 }
 
-fn data_dir() -> PathBuf {
-    directories::ProjectDirs::from("", "", ".pomc")
-        .map(|d| d.data_dir().to_path_buf())
-        .unwrap_or_else(|| PathBuf::from(".pomc"))
-}
-
-pub fn assets_dir() -> PathBuf {
-    data_dir().join("assets")
-}
-
-fn indexes_dir() -> PathBuf {
-    assets_dir().join("indexes")
-}
-
-fn objects_dir() -> PathBuf {
-    assets_dir().join("objects")
-}
-
-fn versions_dir() -> PathBuf {
-    data_dir().join("versions")
-}
-
 pub fn needs_download(version: &str) -> bool {
-    let no_index = !indexes_dir().join(format!("{version}.json")).exists();
-    let no_jar = !assets_dir().join("jar").join(".extracted").exists();
+    let no_index = !storage::indexes_dir()
+        .join(format!("{version}.json"))
+        .exists();
+    let no_jar = !storage::assets_dir()
+        .join("jar")
+        .join(".extracted")
+        .exists();
     no_index || no_jar
 }
 
 pub async fn download(app: &AppHandle, version: &str) -> Result<(), String> {
-    let _ = std::fs::create_dir_all(indexes_dir());
-    let _ = std::fs::create_dir_all(objects_dir());
-    let _ = std::fs::create_dir_all(versions_dir());
-
     let client = reqwest::Client::new();
-    let index_path = indexes_dir().join(format!("{version}.json"));
+    let index_path = storage::indexes_dir().join(format!("{version}.json"));
 
     let (asset_index, version_json) = if index_path.exists() {
         let content = std::fs::read_to_string(&index_path).map_err(|e| e.to_string())?;
@@ -154,7 +135,7 @@ async fn download_objects(
     let total = index.objects.len() as u32;
     let mut downloaded = 0u32;
     let mut skipped = 0u32;
-    let objects = objects_dir();
+    let objects = storage::objects_dir();
 
     for (name, obj) in &index.objects {
         let prefix = &obj.hash[..2];
@@ -202,7 +183,7 @@ async fn download_jar(
     version: &str,
     cached_vj: Option<&VersionJson>,
 ) -> Result<(), String> {
-    let jar_assets = assets_dir().join("jar");
+    let jar_assets = storage::assets_dir().join("jar");
     let marker = jar_assets.join(".extracted");
     if marker.exists() {
         return Ok(());
@@ -238,7 +219,7 @@ async fn download_jar(
         &fetched
     };
 
-    let jar_path = versions_dir().join(format!("{version}.jar"));
+    let jar_path = storage::versions_dir().join(format!("{version}.jar"));
     if !jar_path.exists() || std::fs::metadata(&jar_path).map(|m| m.len()).unwrap_or(0) != dl.size {
         emit_progress(app, 0, 1, "Downloading client JAR...");
         let bytes = client
@@ -255,7 +236,6 @@ async fn download_jar(
             log::warn!("JAR hash mismatch: expected {}, got {actual_hash}", dl.sha1);
         }
 
-        let _ = std::fs::create_dir_all(versions_dir());
         std::fs::write(&jar_path, &bytes).map_err(|e| e.to_string())?;
     }
 

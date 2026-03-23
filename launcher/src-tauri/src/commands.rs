@@ -1,3 +1,5 @@
+use crate::storage;
+
 use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
 use std::process::Stdio;
@@ -250,7 +252,7 @@ pub async fn launch_game(
     debug_enabled: Option<bool>,
 ) -> Result<String, String> {
     let exe = find_client_binary()?;
-    let assets = crate::downloader::assets_dir();
+    let assets = storage::assets_dir();
 
     let account = uuid.as_deref().and_then(crate::auth::try_restore);
 

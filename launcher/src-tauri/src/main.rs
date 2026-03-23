@@ -6,6 +6,8 @@ use tokio::sync::Mutex;
 mod auth;
 mod commands;
 mod downloader;
+mod storage;
+
 use std::collections::VecDeque;
 
 #[derive(Default)]
@@ -21,6 +23,7 @@ fn main() {
 
     tauri::Builder::default()
         .setup(|app| {
+            storage::ensure_dirs();
             app.manage(Mutex::new(AppState::default()));
             Ok(())
         })
