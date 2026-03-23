@@ -61,7 +61,25 @@ struct PlayerInputState {
     sprint: bool,
 }
 
+#[derive(Clone, Copy, PartialEq)]
+pub enum DisplayMode {
+    Windowed,
+    Borderless,
+    Fullscreen,
+}
+
+impl DisplayMode {
+    pub fn cycle(self) -> Self {
+        match self {
+            Self::Windowed => Self::Borderless,
+            Self::Borderless => Self::Fullscreen,
+            Self::Fullscreen => Self::Windowed,
+        }
+    }
+}
+
 struct App {
+    display_mode: DisplayMode,
     window: Option<Arc<Window>>,
     renderer: Option<Renderer>,
     input: InputState,
@@ -152,6 +170,7 @@ impl App {
         };
 
         Self {
+            display_mode: DisplayMode::Windowed,
             window: None,
             renderer: None,
             input: InputState::new(),
@@ -243,6 +262,28 @@ impl App {
         } else {
             let _ = window.set_cursor_grab(CursorGrabMode::None);
             window.set_cursor_visible(true);
+        }
+    }
+
+    fn apply_display_mode(&self) {
+        let Some(window) = &self.window else { return };
+        match self.display_mode {
+            DisplayMode::Windowed => {
+                window.set_fullscreen(None);
+                window.set_decorations(true);
+            }
+            DisplayMode::Borderless => {
+                window.set_fullscreen(Some(winit::window::Fullscreen::Borderless(None)));
+            }
+            DisplayMode::Fullscreen => {
+                let monitor = window.current_monitor();
+                let video_mode = monitor.and_then(|m| m.video_modes().next());
+                if let Some(mode) = video_mode {
+                    window.set_fullscreen(Some(winit::window::Fullscreen::Exclusive(mode)));
+                } else {
+                    window.set_fullscreen(Some(winit::window::Fullscreen::Borderless(None)));
+                }
+            }
         }
     }
 
@@ -675,63 +716,72 @@ impl ApplicationHandler for App {
                     renderer.resize(new_size);
                 }
             }
-            WindowEvent::KeyboardInput { event, .. } => match self.state {
-                GameState::Menu => self.input.on_menu_key_event(&event),
-                GameState::Connecting => {
-                    if event.state.is_pressed() {
-                        if let PhysicalKey::Code(KeyCode::Escape) = event.physical_key {
-                            self.disconnect_to_menu(None);
-                        }
+            WindowEvent::KeyboardInput { event, .. } => {
+                if event.state.is_pressed() {
+                    if let PhysicalKey::Code(KeyCode::F11) = event.physical_key {
+                        self.display_mode = self.display_mode.cycle();
+                        self.menu.display_mode = self.display_mode;
+                        self.apply_display_mode();
                     }
                 }
-                GameState::InGame => {
-                    if event.state.is_pressed() {
-                        if let PhysicalKey::Code(code) = event.physical_key {
-                            if self.chat.is_open() {
-                                match code {
-                                    KeyCode::Escape => {
-                                        self.chat.close();
-                                        self.apply_cursor_grab();
-                                    }
-                                    KeyCode::F3 => self.show_debug = !self.show_debug,
-                                    _ => self.input.on_menu_key_event(&event),
-                                }
-                            } else {
-                                match code {
-                                    KeyCode::Escape => {
-                                        if self.inventory_open {
-                                            self.inventory_open = false;
-                                        } else {
-                                            self.paused = !self.paused;
-                                        }
-                                        self.apply_cursor_grab();
-                                    }
-                                    KeyCode::KeyE if !self.paused => {
-                                        self.inventory_open = !self.inventory_open;
-                                        self.apply_cursor_grab();
-                                    }
-                                    KeyCode::KeyT if !self.paused && !self.inventory_open => {
-                                        self.chat.open();
-                                        self.apply_cursor_grab();
-                                    }
-                                    KeyCode::Slash if !self.paused && !self.inventory_open => {
-                                        self.chat.open_with_slash();
-                                        self.apply_cursor_grab();
-                                    }
-                                    KeyCode::F3 => {
-                                        self.show_debug = !self.show_debug;
-                                    }
-                                    _ => {}
-                                }
+                match self.state {
+                    GameState::Menu => self.input.on_menu_key_event(&event),
+                    GameState::Connecting => {
+                        if event.state.is_pressed() {
+                            if let PhysicalKey::Code(KeyCode::Escape) = event.physical_key {
+                                self.disconnect_to_menu(None);
                             }
                         }
                     }
+                    GameState::InGame => {
+                        if event.state.is_pressed() {
+                            if let PhysicalKey::Code(code) = event.physical_key {
+                                if self.chat.is_open() {
+                                    match code {
+                                        KeyCode::Escape => {
+                                            self.chat.close();
+                                            self.apply_cursor_grab();
+                                        }
+                                        KeyCode::F3 => self.show_debug = !self.show_debug,
+                                        _ => self.input.on_menu_key_event(&event),
+                                    }
+                                } else {
+                                    match code {
+                                        KeyCode::Escape => {
+                                            if self.inventory_open {
+                                                self.inventory_open = false;
+                                            } else {
+                                                self.paused = !self.paused;
+                                            }
+                                            self.apply_cursor_grab();
+                                        }
+                                        KeyCode::KeyE if !self.paused => {
+                                            self.inventory_open = !self.inventory_open;
+                                            self.apply_cursor_grab();
+                                        }
+                                        KeyCode::KeyT if !self.paused && !self.inventory_open => {
+                                            self.chat.open();
+                                            self.apply_cursor_grab();
+                                        }
+                                        KeyCode::Slash if !self.paused && !self.inventory_open => {
+                                            self.chat.open_with_slash();
+                                            self.apply_cursor_grab();
+                                        }
+                                        KeyCode::F3 => {
+                                            self.show_debug = !self.show_debug;
+                                        }
+                                        _ => {}
+                                    }
+                                }
+                            }
+                        }
 
-                    if !self.paused && !self.chat.is_open() && !self.inventory_open {
-                        self.input.on_key_event(&event);
+                        if !self.paused && !self.chat.is_open() && !self.inventory_open {
+                            self.input.on_key_event(&event);
+                        }
                     }
                 }
-            },
+            }
             WindowEvent::MouseWheel { delta, .. } => {
                 let scroll = match delta {
                     winit::event::MouseScrollDelta::LineDelta(_, y) => y,
@@ -820,6 +870,11 @@ impl ApplicationHandler for App {
 
                                 if self.menu.render_distance != self.last_render_distance {
                                     self.sync_render_distance();
+                                }
+
+                                if self.menu.display_mode != self.display_mode {
+                                    self.display_mode = self.menu.display_mode;
+                                    self.apply_display_mode();
                                 }
 
                                 if self.options_from_game && !self.menu.is_options_screen() {

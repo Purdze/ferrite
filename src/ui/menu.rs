@@ -6,6 +6,8 @@ use parking_lot::Mutex;
 
 use serde::{Deserialize, Serialize};
 
+use crate::window::DisplayMode;
+
 use crate::renderer::pipelines::menu_overlay::{
     MenuElement, ICON_CHECK, ICON_CODE, ICON_COMMENT, ICON_GEAR, ICON_GLOBE, ICON_LINK,
     ICON_PAINTBRUSH, ICON_USER,
@@ -199,6 +201,7 @@ pub struct MainMenu {
     pub gui_scale_setting: u32,
     pub render_distance: u32,
     pub simulation_distance: u32,
+    pub display_mode: DisplayMode,
     active_slider: Option<&'static str>,
     settings_dir: PathBuf,
     menu_open_time: Option<Instant>,
@@ -241,6 +244,7 @@ impl MainMenu {
             gui_scale_setting: settings.gui_scale,
             render_distance: settings.render_distance,
             simulation_distance: settings.simulation_distance,
+            display_mode: DisplayMode::Windowed,
             active_slider: None,
             settings_dir: game_dir.to_path_buf(),
             menu_open_time: None,
@@ -1989,6 +1993,11 @@ impl MainMenu {
     }
 
     fn build_options_video(&mut self, sw: f32, sh: f32, input: &MenuInput) -> MainMenuResult {
+        let fullscreen_label = match self.display_mode {
+            DisplayMode::Windowed => "Fullscreen: Windowed",
+            DisplayMode::Borderless => "Fullscreen: Borderless",
+            DisplayMode::Fullscreen => "Fullscreen: Exclusive",
+        };
         let rd = format!("Render Distance: {} chunks", self.render_distance);
         let sd = format!("Simulation Distance: {} chunks", self.render_distance);
         let mf = format!("Max Framerate: {} fps", 120);
@@ -2003,7 +2012,7 @@ impl MainMenu {
             [&mf, "VSync: OFF"],
             ["View Bobbing: ON", &gui_label],
             ["Attack Indicator: Crosshair", "Brightness: 50%"],
-            ["Clouds: Fancy", "Fullscreen: OFF"],
+            ["Clouds: Fancy", fullscreen_label],
             ["Particles: All", "Mipmap Levels: 4"],
         ];
         let rd_frac = (self.render_distance as f32 - 2.0) / 30.0;
@@ -2145,6 +2154,9 @@ impl MainMenu {
                         let max = crate::ui::hud::max_gui_scale(sw, sh);
                         self.gui_scale_setting = (self.gui_scale_setting + 1) % (max + 1);
                         self.save_settings();
+                    }
+                    if label.starts_with("Fullscreen:") {
+                        self.display_mode = self.display_mode.cycle();
                     }
                 }
             }
