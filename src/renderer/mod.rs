@@ -10,7 +10,7 @@ pub(crate) mod util;
 pub(crate) const MAX_FRAMES_IN_FLIGHT: usize = 3;
 
 use std::collections::HashSet;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use ash::vk;
@@ -97,6 +97,8 @@ pub struct Renderer {
     entity_renderer: EntityRenderer,
     chunk_border_pipeline: pipelines::chunk_borders::ChunkBorderPipeline,
     item_entity_pipeline: pipelines::item_entity::ItemEntityPipeline,
+    assets_dir: PathBuf,
+    asset_index: Option<AssetIndex>,
     chunk_buffers: ChunkBufferStore,
     swapchain_dirty: bool,
     width: u32,
@@ -295,6 +297,8 @@ impl Renderer {
             entity_renderer,
             chunk_border_pipeline,
             item_entity_pipeline,
+            assets_dir: assets_dir.to_path_buf(),
+            asset_index: asset_index.clone(),
             chunk_buffers,
             swapchain_dirty: false,
             width: size.width.max(1),
@@ -765,6 +769,8 @@ impl Renderer {
                 &self.ctx.allocator,
                 name,
                 &self.atlas.uv_map,
+                &self.assets_dir,
+                &self.asset_index,
             );
         }
     }

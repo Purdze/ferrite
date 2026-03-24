@@ -6,6 +6,9 @@ use glam::Mat4;
 use gpu_allocator::vulkan::{Allocation, Allocator};
 
 use crate::renderer::camera::CameraUniform;
+use std::path::Path;
+
+use crate::assets::{resolve_asset_path, AssetIndex};
 use crate::renderer::chunk::atlas::{AtlasRegion, AtlasUVMap, TextureAtlas};
 use crate::renderer::chunk::mesher::ChunkVertex;
 use crate::renderer::shader;
@@ -202,12 +205,15 @@ impl ItemEntityPipeline {
     }
 
     /// Create a flat centered quad mesh for items that lack a baked 3D model.
+    #[allow(clippy::too_many_arguments)]
     pub fn ensure_flat_mesh(
         &mut self,
         device: &ash::Device,
         allocator: &Arc<Mutex<Allocator>>,
         name: &str,
         uv_map: &AtlasUVMap,
+        assets_dir: &Path,
+        asset_index: &Option<AssetIndex>,
     ) {
         if self.meshes.contains_key(name) {
             return;
@@ -216,8 +222,19 @@ impl ItemEntityPipeline {
         if !uv_map.has_region(&tex_key) {
             return;
         }
-        let vertices = build_flat_quad(uv_map.get_region(&tex_key));
-        self.insert_mesh(device, allocator, name, &vertices);
+        let region = uv_map.get_region(&tex_key);
+        let asset_path = format!("minecraft/textures/item/{name}.png");
+        let path = resolve_asset_path(assets_dir, asset_index, &asset_path);
+        let vertices = match crate::assets::load_image(&path) {
+            Ok(img) => {
+                let rgba = img.to_rgba8();
+                build_extruded_item(&rgba, region)
+            }
+            Err(_) => build_flat_quad(region),
+        };
+        if !vertices.is_empty() {
+            self.insert_mesh(device, allocator, name, &vertices);
+        }
     }
 
     pub fn draw(
@@ -318,6 +335,137 @@ fn build_item_mesh(model: &BakedModel, uv_map: &AtlasUVMap) -> Vec<ChunkVertex> 
         }
     }
     vertices
+}
+
+fn build_extruded_item(img: &image::RgbaImage, region: AtlasRegion) -> Vec<ChunkVertex> {
+    let w = img.width() as i32;
+    let h = img.height() as i32;
+    let mut vertices = Vec::new();
+
+    let px = 1.0 / w as f32;
+    let py = 1.0 / h as f32;
+    let u_span = region.u_max - region.u_min;
+    let v_span = region.v_max - region.v_min;
+    let z_min = 7.5 / 16.0 - 0.5;
+    let z_max = 8.5 / 16.0 - 0.5;
+
+    let is_opaque = |x: i32, y: i32| -> bool {
+        x >= 0 && y >= 0 && x < w && y < h && img.get_pixel(x as u32, y as u32)[3] > 0
+    };
+
+    let front = [
+        [-0.5, -0.5, z_max],
+        [0.5, -0.5, z_max],
+        [0.5, 0.5, z_max],
+        [-0.5, -0.5, z_max],
+        [0.5, 0.5, z_max],
+        [-0.5, 0.5, z_max],
+    ];
+    let front_uvs = [
+        [region.u_min, region.v_max],
+        [region.u_max, region.v_max],
+        [region.u_max, region.v_min],
+        [region.u_min, region.v_max],
+        [region.u_max, region.v_min],
+        [region.u_min, region.v_min],
+    ];
+    for i in 0..6 {
+        vertices.push(ChunkVertex {
+            position: front[i],
+            tex_coords: front_uvs[i],
+            light: 1.0,
+            tint: [1.0, 1.0, 1.0],
+        });
+    }
+
+    let back = [
+        [0.5, -0.5, z_min],
+        [-0.5, -0.5, z_min],
+        [-0.5, 0.5, z_min],
+        [0.5, -0.5, z_min],
+        [-0.5, 0.5, z_min],
+        [0.5, 0.5, z_min],
+    ];
+    let back_uvs = [
+        [region.u_min, region.v_max],
+        [region.u_max, region.v_max],
+        [region.u_max, region.v_min],
+        [region.u_min, region.v_max],
+        [region.u_max, region.v_min],
+        [region.u_min, region.v_min],
+    ];
+    for i in 0..6 {
+        vertices.push(ChunkVertex {
+            position: back[i],
+            tex_coords: back_uvs[i],
+            light: 1.0,
+            tint: [1.0, 1.0, 1.0],
+        });
+    }
+
+    for y in 0..h {
+        for x in 0..w {
+            if !is_opaque(x, y) {
+                continue;
+            }
+            let fx = x as f32 * px - 0.5;
+            let fy = 0.5 - (y + 1) as f32 * py;
+            let fx1 = fx + px;
+            let fy1 = fy + py;
+            let u0 = region.u_min + x as f32 * px * u_span;
+            let u1 = region.u_min + (x + 1) as f32 * px * u_span;
+            let v0 = region.v_min + y as f32 * py * v_span;
+            let v1 = region.v_min + (y + 1) as f32 * py * v_span;
+            let um = (u0 + u1) * 0.5;
+            let vm = (v0 + v1) * 0.5;
+
+            if !is_opaque(x, y - 1) {
+                push_side_quad(&mut vertices, fx, fy1, fx1, fy1, z_min, z_max, um, vm, 0.8);
+            }
+            if !is_opaque(x, y + 1) {
+                push_side_quad(&mut vertices, fx1, fy, fx, fy, z_min, z_max, um, vm, 0.8);
+            }
+            if !is_opaque(x - 1, y) {
+                push_side_quad(&mut vertices, fx, fy, fx, fy1, z_min, z_max, um, vm, 0.8);
+            }
+            if !is_opaque(x + 1, y) {
+                push_side_quad(&mut vertices, fx1, fy1, fx1, fy, z_min, z_max, um, vm, 0.8);
+            }
+        }
+    }
+
+    vertices
+}
+
+#[allow(clippy::too_many_arguments)]
+fn push_side_quad(
+    vertices: &mut Vec<ChunkVertex>,
+    x0: f32,
+    y0: f32,
+    x1: f32,
+    y1: f32,
+    z0: f32,
+    z1: f32,
+    u: f32,
+    v: f32,
+    light: f32,
+) {
+    let positions = [
+        [x0, y0, z0],
+        [x1, y1, z0],
+        [x1, y1, z1],
+        [x0, y0, z0],
+        [x1, y1, z1],
+        [x0, y0, z1],
+    ];
+    for p in &positions {
+        vertices.push(ChunkVertex {
+            position: *p,
+            tex_coords: [u, v],
+            light,
+            tint: [1.0, 1.0, 1.0],
+        });
+    }
 }
 
 fn build_flat_quad(region: AtlasRegion) -> Vec<ChunkVertex> {
