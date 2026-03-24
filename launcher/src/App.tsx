@@ -24,7 +24,6 @@ function App() {
     setActiveIndex,
     setAccountDropdownOpen,
     server,
-
     setInstallations,
     editingInstall,
     setEditingInstall,
@@ -41,7 +40,7 @@ function App() {
     setNews,
     setSkinUrl,
     setSelectedNote,
-    useConsole,
+    launcherSettings,
   } = useAppStateContext();
 
   const openPatchNote = useCallback(
@@ -142,7 +141,7 @@ function App() {
       const result = await invoke<string>("launch_game", {
         uuid: account?.uuid || null,
         server: server || null,
-        debugEnabled: useConsole || null,
+        debugEnabled: launcherSettings.launchWithConsole || null,
       });
       setStatus(result);
     } catch (e) {
@@ -152,7 +151,14 @@ function App() {
       setLaunching(false);
       setStatus("");
     }, 3000);
-  }, [setLaunching, setStatus, selectedVersion, account?.uuid, server, useConsole]);
+  }, [
+    setLaunching,
+    setStatus,
+    selectedVersion,
+    account?.uuid,
+    server,
+    launcherSettings.launchWithConsole,
+  ]);
 
   return (
     <div className="app">

@@ -6,6 +6,9 @@ use tokio::sync::Mutex;
 mod auth;
 mod commands;
 mod downloader;
+mod settings;
+mod storage;
+
 use std::collections::VecDeque;
 
 #[derive(Default)]
@@ -21,6 +24,7 @@ fn main() {
 
     tauri::Builder::default()
         .setup(|app| {
+            storage::ensure_dirs();
             app.manage(Mutex::new(AppState::default()));
             Ok(())
         })
@@ -37,7 +41,11 @@ fn main() {
             commands::get_patch_notes,
             commands::get_patch_content,
             commands::launch_game,
-            commands::get_client_logs
+            commands::get_client_logs,
+            commands::load_launcher_settings,
+            commands::set_launcher_language,
+            commands::set_keep_launcher_open,
+            commands::set_launch_with_console,
         ])
         .run(tauri::generate_context!())
         .expect("failed to run POMC launcher");

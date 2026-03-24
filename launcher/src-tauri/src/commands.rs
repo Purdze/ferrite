@@ -1,3 +1,6 @@
+use crate::settings::LauncherSettings;
+use crate::storage;
+
 use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
 use std::process::Stdio;
@@ -250,7 +253,7 @@ pub async fn launch_game(
     debug_enabled: Option<bool>,
 ) -> Result<String, String> {
     let exe = find_client_binary()?;
-    let assets = crate::downloader::assets_dir();
+    let assets = storage::assets_dir();
 
     let account = uuid.as_deref().and_then(crate::auth::try_restore);
 
@@ -410,4 +413,25 @@ fn find_client_binary() -> Result<std::path::PathBuf, String> {
     }
 
     Err("POMC client not found. It will be bundled in future releases.".into())
+}
+
+#[tauri::command]
+pub async fn load_launcher_settings() -> LauncherSettings {
+    let settings = LauncherSettings::get().await;
+    settings.clone()
+}
+
+#[tauri::command]
+pub async fn set_launcher_language(language: String) -> Result<(), String> {
+    LauncherSettings::update(|s| s.language = language).await
+}
+
+#[tauri::command]
+pub async fn set_keep_launcher_open(keep: bool) -> Result<(), String> {
+    LauncherSettings::update(|s| s.keep_launcher_open = keep).await
+}
+
+#[tauri::command]
+pub async fn set_launch_with_console(launch: bool) -> Result<(), String> {
+    LauncherSettings::update(|s| s.launch_with_console = launch).await
 }
