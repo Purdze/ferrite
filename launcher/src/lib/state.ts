@@ -1,5 +1,52 @@
-import { createElement, createContext, useContext, useState, ReactNode } from "react";
-import { Page, AuthAccount, Installation, GameVersion, PatchNote } from "./types";
+import { createContext, createElement, ReactNode, useContext, useEffect, useState } from "react";
+import { AuthAccount, GameVersion, Installation, LauncherSettings, Page, PatchNote } from "./types";
+import { invoke } from "@tauri-apps/api/core";
+
+const useLauncherSettings = () => {
+  const [launcherSettings, setLauncherSettings] = useState<LauncherSettings>({
+    language: "English",
+    keepLauncherOpen: true,
+    launchWithConsole: false,
+  });
+
+  useEffect(() => {
+    invoke<LauncherSettings>("load_launcher_settings")
+      .then((settings) => setLauncherSettings(settings))
+      .catch(console.error);
+  }, []);
+
+  const setLanguage = async (language: string) => {
+    try {
+      await invoke("set_launcher_language", { language });
+      setLauncherSettings((prev) => ({ ...prev, language }));
+    } catch (err) {
+      console.error(err);
+    }
+  };
+  const setKeepLauncherOpen = async (keep: boolean) => {
+    try {
+      await invoke("set_keep_launcher_open", { keep });
+      setLauncherSettings((prev) => ({ ...prev, keepLauncherOpen: keep }));
+    } catch (err) {
+      console.error(err);
+    }
+  };
+  const setLaunchWithConsole = async (launch: boolean) => {
+    try {
+      await invoke("set_launch_with_console", { launch });
+      setLauncherSettings((prev) => ({ ...prev, launchWithConsole: launch }));
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  return {
+    ...launcherSettings,
+    setLanguage,
+    setKeepLauncherOpen,
+    setLaunchWithConsole,
+  };
+};
 
 const useAppState = () => {
   const [page, setPage] = useState<Page>("home");
@@ -8,8 +55,6 @@ const useAppState = () => {
   const [accountDropdownOpen, setAccountDropdownOpen] = useState(false);
 
   const [server] = useState("");
-  const [keepOpen, setKeepOpen] = useState(true);
-  const [useConsole, setUseConsole] = useState(false);
 
   const [modView, setModView] = useState<"list" | "grid">("list");
   const [modSearch, setModSearch] = useState("");
@@ -44,6 +89,8 @@ const useAppState = () => {
     body: string;
   } | null>(null);
 
+  const launcherSettings = useLauncherSettings();
+
   return {
     account,
     page,
@@ -55,10 +102,6 @@ const useAppState = () => {
     accountDropdownOpen,
     setAccountDropdownOpen,
     server,
-    keepOpen,
-    setKeepOpen,
-    useConsole,
-    setUseConsole,
     modView,
     setModView,
     modSearch,
@@ -91,6 +134,8 @@ const useAppState = () => {
     selectedNote,
     setSelectedNote,
     username,
+
+    launcherSettings,
   };
 };
 
