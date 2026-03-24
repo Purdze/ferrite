@@ -47,7 +47,7 @@ export default function InstallationsPage() {
         {installations.map((inst) => (
           <div
             key={inst.id}
-            className={`install-card ${inst.id === activeInstall ? "active" : ""}`}
+            className={`install-card ${inst.id === activeInstall?.id ? "active" : ""}`}
           >
             <div className="install-card-icon">
               <HiCube />
@@ -62,7 +62,7 @@ export default function InstallationsPage() {
             <button
               className="install-play-btn"
               onClick={() => {
-                setActiveInstall(inst.id);
+                setActiveInstall(inst);
                 setPage("home");
               }}
             >
@@ -116,8 +116,8 @@ export default function InstallationsPage() {
                         message: "Are you sure you want to delete this installation?",
                         onConfirm: async () => {
                           setInstallations((prev) => prev.filter((i) => i.id !== inst.id));
-                          if (activeInstall === inst.id) {
-                            setActiveInstall("default");
+                          if (!activeInstall || activeInstall.id === inst.id) {
+                            setActiveInstall(() => installations[0]);
                           }
                         },
                       },

@@ -151,6 +151,12 @@ function App() {
   );
 
   const handleLaunch = useCallback(async () => {
+    if (!activeInstall) {
+      setStatus("No installation selected");
+      setTimeout(() => setStatus(""), 3000);
+      return;
+    }
+
     setLaunching(true);
     setStatus("Checking assets...");
     try {
@@ -173,6 +179,7 @@ function App() {
       setStatus("");
     }, 3000);
   }, [
+    activeInstall,
     setLaunching,
     setStatus,
     setDownloadProgress,

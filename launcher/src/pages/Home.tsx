@@ -13,7 +13,6 @@ export default function Homepage({ handleLaunch, openPatchNote }: HomepageProps)
   const {
     launching,
     installations,
-    selectedVersion,
     activeInstall,
     setActiveInstall,
     news,
@@ -48,7 +47,7 @@ export default function Homepage({ handleLaunch, openPatchNote }: HomepageProps)
       <div className="version-badge-wrapper" ref={versionDropdownRef}>
         <button className="version-badge" onClick={versionDropdown.toggle}>
           <HiCube className="version-badge-icon" />
-          <span>{selectedVersion}</span>
+          <span>{activeInstall?.version}</span>
           <HiChevronDown
             className={`version-badge-arrow ${versionDropdown.isOpen ? "open" : ""}`}
           />
@@ -59,9 +58,9 @@ export default function Homepage({ handleLaunch, openPatchNote }: HomepageProps)
               {installations.map((inst) => (
                 <button
                   key={inst.id}
-                  className={`version-item ${inst.id === activeInstall ? "active" : ""}`}
+                  className={`version-item ${inst.id === activeInstall?.id ? "active" : ""}`}
                   onClick={() => {
-                    setActiveInstall(inst.id);
+                    setActiveInstall(inst);
                     versionDropdown.close();
                   }}
                 >
