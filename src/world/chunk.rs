@@ -2,9 +2,11 @@ use std::io::Cursor;
 use std::sync::Arc;
 
 use azalea_block::BlockState;
+use azalea_core::heightmap_kind::HeightmapKind;
 use azalea_core::position::ChunkPos;
-use azalea_world::chunk_storage::{Chunk, ChunkStorage, PartialChunkStorage};
-use azalea_world::heightmap::HeightmapKind;
+use azalea_world::chunk::partial::PartialChunkStorage;
+use azalea_world::chunk::storage::ChunkStorage;
+use azalea_world::chunk::Chunk;
 use parking_lot::RwLock;
 use thiserror::Error;
 
@@ -69,7 +71,7 @@ impl ChunkStore {
             y,
             z: z.rem_euclid(16) as u8,
         };
-        chunk.set_block_state(&block_pos, state, self.chunk_storage.min_y);
+        chunk.set_block_state(&block_pos, state, self.chunk_storage.min_y());
     }
 
     pub fn get_block_state(&self, x: i32, y: i32, z: i32) -> BlockState {
@@ -78,15 +80,15 @@ impl ChunkStore {
             return BlockState::AIR;
         };
         let chunk = chunk_lock.read();
-        block_state_from_section(&chunk, x, y, z, self.chunk_storage.min_y)
+        block_state_from_section(&chunk, x, y, z, self.chunk_storage.min_y())
     }
 
     pub fn height(&self) -> u32 {
-        self.chunk_storage.height
+        self.chunk_storage.height()
     }
 
     pub fn min_y(&self) -> i32 {
-        self.chunk_storage.min_y
+        self.chunk_storage.min_y()
     }
 }
 

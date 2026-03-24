@@ -96,7 +96,7 @@ impl MeshDispatcher {
 struct ChunkStoreSnapshot {
     chunks: Vec<(
         ChunkPos,
-        Option<Arc<parking_lot::RwLock<azalea_world::chunk_storage::Chunk>>>,
+        Option<Arc<parking_lot::RwLock<azalea_world::Chunk>>>,
     )>,
     min_y: i32,
     height: u32,
@@ -109,13 +109,13 @@ impl ChunkStoreSnapshot {
             .chunks
             .iter()
             .find(|(p, _)| *p == chunk_pos)
-            .and_then(|(_, c)| c.as_ref());
+            .and_then(|(_, c): &(ChunkPos, _)| c.as_ref());
 
         let Some(chunk_lock) = chunk_lock else {
             return azalea_block::BlockState::AIR;
         };
 
-        let c = chunk_lock.read();
+        let c: parking_lot::RwLockReadGuard<'_, azalea_world::Chunk> = chunk_lock.read();
         chunk::block_state_from_section(&c, x, y, z, self.min_y)
     }
 

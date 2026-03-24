@@ -5,9 +5,9 @@ pub mod sender;
 use std::sync::Arc;
 
 use azalea_block::BlockState;
+use azalea_core::heightmap_kind::HeightmapKind;
 use azalea_core::position::{BlockPos, ChunkPos};
 use azalea_inventory::ItemStack;
-use azalea_world::heightmap::HeightmapKind;
 
 pub enum NetworkEvent {
     Connected,

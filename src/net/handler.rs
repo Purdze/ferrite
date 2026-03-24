@@ -128,9 +128,15 @@ pub fn handle_game_packet(
             let _ = event_tx.try_send(NetworkEvent::BlockChangedAck { seq: p.seq });
         }
         ClientboundGamePacket::SetTime(p) => {
+            let day_time = p
+                .clock_updates
+                .values()
+                .next()
+                .map(|c| c.total_ticks)
+                .unwrap_or(0);
             let _ = event_tx.try_send(NetworkEvent::TimeUpdate {
                 game_time: p.game_time,
-                day_time: p.day_time,
+                day_time,
             });
         }
         ClientboundGamePacket::SetChunkCacheRadius(p) => {

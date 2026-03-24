@@ -580,7 +580,7 @@ impl App {
             };
             sender.send(ServerboundGamePacket::PlayerCommand(
                 azalea_protocol::packets::game::s_player_command::ServerboundPlayerCommand {
-                    id: azalea_world::MinecraftEntityId(0),
+                    id: azalea_core::entity_id::MinecraftEntityId(0),
                     action,
                     data: 0,
                 },
