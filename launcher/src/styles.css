@@ -135,7 +135,7 @@ body {
   font-size: 12px;
   font-weight: 400;
   color: var(--text-dim);
-  letter-spacing: 0.5px;
+  letter-spacing: 0.042em;
 }
 
 .titlebar-controls {
@@ -263,7 +263,7 @@ body {
   font-family: var(--font-display);
   font-size: 13px;
   font-weight: 600;
-  letter-spacing: 1.5px;
+  letter-spacing: 0.115em;
   cursor: pointer;
   transition: all 0.2s;
   position: relative;
@@ -496,10 +496,10 @@ body {
   background: none;
   border: none;
   color: var(--text-muted);
-  font-family: var(--font-display);
+  font-family: var(--font-display), sans-serif;
   font-size: 12px;
   font-weight: 600;
-  letter-spacing: 1.5px;
+  letter-spacing: 0.125em;
   cursor: pointer;
   border-radius: var(--radius);
   transition: all 0.2s;
@@ -706,7 +706,6 @@ body {
   backdrop-filter: blur(12px);
   border: 1px solid rgba(74, 222, 128, 0.3);
   border-radius: 8px;
-  font-family: var(--font-display);
   font-size: 13px;
   font-weight: 700;
   letter-spacing: 2px;
@@ -771,7 +770,6 @@ body {
 }
 
 .version-label {
-  font-family: var(--font-display);
   font-size: 12px;
   font-weight: 700;
   letter-spacing: 2px;
@@ -835,7 +833,14 @@ body {
 
 .play-button:disabled {
   opacity: 0.7;
+}
+
+.play-button.launching:disabled {
   cursor: wait;
+}
+
+.play-button.no-install:disabled {
+  cursor: not-allowed;
 }
 
 .play-icon {
@@ -845,7 +850,6 @@ body {
 }
 
 .play-text {
-  font-family: var(--font-display);
   font-size: 22px;
   font-weight: 700;
   letter-spacing: 8px;
@@ -884,7 +888,7 @@ body {
   border: 1px solid var(--border);
   border-radius: 20px;
   color: var(--text-dim);
-  font-family: var(--font-display);
+
   font-size: 12px;
   font-weight: 600;
   letter-spacing: 1px;
@@ -956,7 +960,7 @@ body {
   background: none;
   border: none;
   color: var(--text-dim);
-  font-family: var(--font-display);
+
   font-size: 12px;
   font-weight: 500;
   cursor: pointer;
@@ -993,7 +997,7 @@ body {
 
 .status-toast {
   text-align: center;
-  font-family: var(--font-display);
+
   font-size: 12px;
   font-weight: 500;
   letter-spacing: 1px;
@@ -1059,7 +1063,6 @@ body {
 }
 
 .server-label {
-  font-family: var(--font-display);
   font-size: 10px;
   font-weight: 600;
   letter-spacing: 2px;
@@ -1073,7 +1076,7 @@ body {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   color: var(--text);
-  font-family: var(--font-body);
+
   font-size: 13px;
   outline: none;
   transition: all 0.2s;
@@ -1438,7 +1441,6 @@ body {
 }
 
 .news-heading {
-  font-family: var(--font-display);
   font-size: 14px;
   font-weight: 700;
   letter-spacing: 4px;
@@ -1472,9 +1474,8 @@ body {
 
 .news-card-img {
   height: 120px;
-  background: linear-gradient(135deg, #1a3a2a 0%, #2a1a3a 100%);
   background-size: cover;
-  background-position: center;
+  background: linear-gradient(135deg, #1a3a2a 0%, #2a1a3a 100%) center;
   position: relative;
 }
 
@@ -1490,7 +1491,7 @@ body {
   font-family: var(--font-display);
   font-size: 9px;
   font-weight: 700;
-  letter-spacing: 1.5px;
+  letter-spacing: 0.125em;
   text-transform: uppercase;
   color: var(--accent);
 }
@@ -1512,7 +1513,7 @@ body {
   font-family: var(--font-display);
   font-size: 13px;
   font-weight: 700;
-  letter-spacing: 0.5px;
+  letter-spacing: 0.056em;
   color: var(--text);
   line-height: 1.3;
 }
@@ -1524,7 +1525,6 @@ body {
   display: -webkit-box;
   line-clamp: 2;
   -webkit-line-clamp: 2;
-  line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
@@ -1544,7 +1544,6 @@ body {
 }
 
 .news-page-heading {
-  font-family: var(--font-display);
   font-size: 16px;
   font-weight: 700;
   letter-spacing: 4px;
@@ -1579,9 +1578,8 @@ body {
 .news-card-img-wide {
   width: 180px;
   min-height: 100px;
-  background: linear-gradient(135deg, #1a3a2a 0%, #2a1a3a 100%);
   background-size: cover;
-  background-position: center;
+  background: linear-gradient(135deg, #1a3a2a 0%, #2a1a3a 100%) center;
   flex-shrink: 0;
   position: relative;
 }
@@ -1602,13 +1600,11 @@ body {
   display: -webkit-box;
   line-clamp: 3;
   -webkit-line-clamp: 3;
-  line-clamp: 3;
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
 
 .news-version {
-  font-family: var(--font-display);
   font-size: 10px;
   font-weight: 600;
   letter-spacing: 1px;
@@ -1630,7 +1626,6 @@ body {
 }
 
 .installs-heading {
-  font-family: var(--font-display);
   font-size: 16px;
   font-weight: 700;
   letter-spacing: 4px;
@@ -1646,7 +1641,7 @@ body {
   border: 1px solid rgba(74, 222, 128, 0.2);
   border-radius: var(--radius);
   color: var(--accent);
-  font-family: var(--font-display);
+
   font-size: 12px;
   font-weight: 600;
   letter-spacing: 1px;
@@ -1712,7 +1707,7 @@ body {
   font-size: 14px;
   font-weight: 700;
   color: var(--text);
-  letter-spacing: 0.5px;
+  letter-spacing: 0.036em;
 }
 
 .install-card-version {
@@ -1735,7 +1730,7 @@ body {
   border: none;
   border-radius: 6px;
   color: #0a1a0a;
-  font-family: var(--font-display);
+
   font-size: 12px;
   font-weight: 700;
   letter-spacing: 1px;
@@ -1853,7 +1848,6 @@ body {
 }
 
 .dialog-title {
-  font-family: var(--font-display);
   font-size: 20px;
   font-weight: 700;
   letter-spacing: 2px;
@@ -1882,7 +1876,6 @@ body {
 }
 
 .dialog-field label {
-  font-family: var(--font-display);
   font-size: 10px;
   font-weight: 600;
   letter-spacing: 2px;
@@ -1895,7 +1888,7 @@ body {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   color: var(--text);
-  font-family: var(--font-body);
+
   font-size: 13px;
   outline: none;
   transition: all 0.2s;
@@ -1920,7 +1913,7 @@ body {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   color: var(--text);
-  font-family: var(--font-body);
+
   font-size: 13px;
   cursor: pointer;
   transition: all 0.2s;
@@ -1962,7 +1955,7 @@ body {
   gap: 8px;
   padding: 10px 12px;
   border-bottom: 1px solid var(--border);
-  font-family: var(--font-display);
+
   font-size: 11px;
   font-weight: 600;
   color: var(--text-dim);
@@ -1987,7 +1980,7 @@ body {
   background: none;
   border: none;
   color: var(--text-dim);
-  font-family: var(--font-body);
+
   font-size: 13px;
   cursor: pointer;
   transition: all 0.12s;
@@ -2005,7 +1998,6 @@ body {
 }
 
 .custom-select-tag {
-  font-family: var(--font-display);
   font-size: 9px;
   font-weight: 700;
   letter-spacing: 1px;
@@ -2059,7 +2051,7 @@ body {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   color: var(--text);
-  font-family: var(--font-body);
+
   font-size: 13px;
   outline: none;
   transition: all 0.2s;
@@ -2081,7 +2073,6 @@ body {
 .dialog-resolution input[type="number"] {
   appearance: textfield;
   -moz-appearance: textfield;
-  appearance: textfield;
 }
 
 .dialog-resolution-x {
@@ -2102,7 +2093,7 @@ body {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   color: var(--text-dim);
-  font-family: var(--font-display);
+
   font-size: 12px;
   font-weight: 600;
   letter-spacing: 1px;
@@ -2122,7 +2113,7 @@ body {
   border: none;
   border-radius: var(--radius);
   color: #0a1a0a;
-  font-family: var(--font-display);
+
   font-size: 12px;
   font-weight: 700;
   letter-spacing: 1px;
@@ -2175,7 +2166,7 @@ body {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   color: var(--text-dim);
-  font-family: var(--font-display);
+
   font-size: 12px;
   font-weight: 600;
   letter-spacing: 1px;
@@ -2232,7 +2223,6 @@ body {
 }
 
 .note-header-title {
-  font-family: var(--font-display);
   font-size: 30px;
   font-weight: 700;
   letter-spacing: 2px;
@@ -2255,7 +2245,6 @@ body {
 .note-body h1,
 .note-body h2,
 .note-body h3 {
-  font-family: var(--font-display);
   color: var(--text);
   margin: 20px 0 8px;
   letter-spacing: 1px;
@@ -2309,7 +2298,6 @@ body {
 }
 
 .settings-heading {
-  font-family: var(--font-display);
   font-size: 16px;
   font-weight: 700;
   letter-spacing: 4px;
@@ -2322,7 +2310,6 @@ body {
 }
 
 .settings-section-title {
-  font-family: var(--font-display);
   font-size: 12px;
   font-weight: 700;
   letter-spacing: 2px;
@@ -2352,7 +2339,6 @@ body {
 }
 
 .settings-row-label {
-  font-family: var(--font-display);
   font-size: 14px;
   font-weight: 600;
   color: var(--text);
@@ -2373,7 +2359,7 @@ body {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   color: var(--text);
-  font-family: var(--font-display);
+
   font-size: 12px;
   font-weight: 600;
   cursor: default;
@@ -2385,7 +2371,6 @@ body {
   width: 44px;
   height: 24px;
   border-radius: 12px;
-  border: none;
   background: var(--glass-light);
   cursor: pointer;
   position: relative;
@@ -2433,7 +2418,6 @@ body {
 }
 
 .stub-title {
-  font-family: var(--font-display);
   font-size: 24px;
   font-weight: 700;
   letter-spacing: 4px;
@@ -2470,7 +2454,7 @@ body {
   border: 1px solid rgba(255, 180, 50, 0.2);
   border-radius: var(--radius);
   color: rgba(255, 200, 100, 0.8);
-  font-family: var(--font-display);
+
   font-size: 12px;
   font-weight: 600;
   letter-spacing: 1px;
@@ -2479,7 +2463,6 @@ body {
 }
 
 .mock-heading {
-  font-family: var(--font-display);
   font-size: 16px;
   font-weight: 700;
   letter-spacing: 4px;
@@ -2488,7 +2471,6 @@ body {
 }
 
 .mock-subheading {
-  font-family: var(--font-display);
   font-size: 11px;
   font-weight: 600;
   letter-spacing: 2px;
@@ -2543,7 +2525,7 @@ body {
   justify-content: center;
   background: linear-gradient(135deg, var(--purple), #a78bfa);
   border-radius: 6px;
-  font-family: var(--font-display);
+
   font-size: 14px;
   font-weight: 700;
   color: white;
@@ -2563,7 +2545,6 @@ body {
 }
 
 .mock-friend-name {
-  font-family: var(--font-display);
   font-size: 13px;
   font-weight: 600;
   color: var(--text);
@@ -2587,7 +2568,7 @@ body {
   border: 1px solid var(--border);
   border-radius: 6px;
   color: var(--accent);
-  font-family: var(--font-display);
+
   font-size: 11px;
   font-weight: 700;
   cursor: pointer;
@@ -2630,7 +2611,7 @@ body {
   background: none;
   border: none;
   color: var(--text);
-  font-family: var(--font-body);
+
   font-size: 13px;
   outline: none;
   width: 100%;
@@ -2651,7 +2632,7 @@ body {
   border: 1px solid var(--border);
   border-radius: 20px;
   color: var(--text-dim);
-  font-family: var(--font-display);
+
   font-size: 10px;
   font-weight: 600;
   letter-spacing: 1px;
@@ -2771,7 +2752,6 @@ body {
 }
 
 .mock-mod-name {
-  font-family: var(--font-display);
   font-size: 14px;
   font-weight: 700;
   color: var(--text);
@@ -2796,7 +2776,7 @@ body {
   border: none;
   border-radius: 6px;
   color: #0a1a0a;
-  font-family: var(--font-display);
+
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 1px;
@@ -2816,7 +2796,6 @@ body {
 }
 
 .stub-badge {
-  font-family: var(--font-display);
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 2px;
@@ -2883,7 +2862,6 @@ body {
 }
 
 .console {
-  font-family: "Courier New", Courier, monospace;
   overflow: hidden;
   padding: 0.5rem;
   flex: 1 1 auto;
@@ -2950,7 +2928,6 @@ body {
   height: 100%;
   aspect-ratio: 2/1;
   background-color: var(--glass-heavy);
-  color: var(--text);
   border-radius: var(--radius);
 
   --color: var(--console-info);
