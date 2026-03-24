@@ -9,7 +9,7 @@ const getLogs: () => Promise<string[]> = async () => invoke("get_client_logs");
 
 interface ConsoleMessage {
   type: "message" | "reset";
-  val?: String;
+  val?: string;
 }
 
 const Log = ({ log }: { log: string }) => {
