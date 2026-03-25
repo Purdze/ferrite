@@ -135,8 +135,10 @@ impl EntityStore {
         pitch: f32,
         head_yaw: f32,
     ) {
-        self.living
-            .insert(id, LivingEntity::new(entity_type, position, yaw, pitch, head_yaw));
+        self.living.insert(
+            id,
+            LivingEntity::new(entity_type, position, yaw, pitch, head_yaw),
+        );
     }
 
     pub fn move_living_delta(&mut self, id: i32, dx: f64, dy: f64, dz: f64) {

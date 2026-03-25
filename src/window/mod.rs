@@ -1276,12 +1276,12 @@ impl ApplicationHandler for App {
                                             y: pos.y,
                                             z: pos.z,
                                             yaw: body_yaw,
-                                            pitch: e.prev_pitch
-                                                + (e.pitch - e.prev_pitch) * alpha,
+                                            pitch: e.prev_pitch + (e.pitch - e.prev_pitch) * alpha,
                                             head_yaw,
                                             is_baby: e.is_baby,
                                             walk_anim_pos: e.walk_anim_pos,
                                             walk_anim_speed: e.walk_anim_speed,
+                                            entity_kind: e.entity_type,
                                         }
                                     })
                                     .collect();

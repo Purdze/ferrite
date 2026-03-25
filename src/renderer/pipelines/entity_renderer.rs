@@ -1,13 +1,15 @@
+use std::collections::HashMap;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 
 use ash::vk;
+use azalea_registry::builtin::EntityKind;
 use gpu_allocator::vulkan::{Allocation, Allocator};
 
 use crate::assets::{resolve_asset_path, AssetIndex};
 use crate::renderer::camera::CameraUniform;
 use crate::renderer::chunk::mesher::ChunkVertex;
-use crate::renderer::entity_model;
+use crate::renderer::entity_model::{self, BakedEntityModel};
 use crate::renderer::shader;
 use crate::renderer::util;
 use crate::renderer::MAX_FRAMES_IN_FLIGHT;
@@ -22,6 +24,32 @@ pub struct EntityRenderInfo {
     pub is_baby: bool,
     pub walk_anim_pos: f32,
     pub walk_anim_speed: f32,
+    pub entity_kind: EntityKind,
+}
+
+struct MobVariant {
+    model: BakedEntityModel,
+    vertex_buffer: vk::Buffer,
+    vertex_allocation: Allocation,
+    texture_image: vk::Image,
+    texture_view: vk::ImageView,
+    texture_allocation: Allocation,
+    texture_set: vk::DescriptorSet,
+}
+
+struct MobEntry {
+    adult: MobVariant,
+    baby: Option<MobVariant>,
+}
+
+impl MobEntry {
+    fn variant(&self, is_baby: bool) -> &MobVariant {
+        if is_baby {
+            self.baby.as_ref().unwrap_or(&self.adult)
+        } else {
+            &self.adult
+        }
+    }
 }
 
 pub struct EntityRenderer {
@@ -31,23 +59,35 @@ pub struct EntityRenderer {
     texture_layout: vk::DescriptorSetLayout,
     descriptor_pool: vk::DescriptorPool,
     camera_sets: Vec<vk::DescriptorSet>,
-    adult_texture_set: vk::DescriptorSet,
-    baby_texture_set: vk::DescriptorSet,
     camera_buffers: Vec<vk::Buffer>,
     camera_allocations: Vec<Allocation>,
-    adult_vertex_buffer: vk::Buffer,
-    adult_vertex_allocation: Allocation,
-    adult_model: entity_model::BakedEntityModel,
-    baby_vertex_buffer: vk::Buffer,
-    baby_vertex_allocation: Allocation,
-    baby_model: entity_model::BakedEntityModel,
-    adult_texture_image: vk::Image,
-    adult_texture_view: vk::ImageView,
-    baby_texture_image: vk::Image,
-    baby_texture_view: vk::ImageView,
     texture_sampler: vk::Sampler,
-    adult_texture_allocation: Allocation,
-    baby_texture_allocation: Allocation,
+    mobs: HashMap<EntityKind, MobEntry>,
+}
+
+struct MobDef {
+    kind: EntityKind,
+    adult_model: BakedEntityModel,
+    adult_tex_keys: &'static [&'static str],
+    adult_tex_size: u32,
+    baby_model: Option<BakedEntityModel>,
+    baby_tex_keys: Option<&'static [&'static str]>,
+    baby_tex_size: u32,
+}
+
+fn mob_definitions() -> Vec<MobDef> {
+    vec![MobDef {
+        kind: EntityKind::Pig,
+        adult_model: entity_model::bake_pig_model(),
+        adult_tex_keys: &[
+            "minecraft/textures/entity/pig/pig_temperate.png",
+            "minecraft/textures/entity/pig/temperate_pig.png",
+        ],
+        adult_tex_size: 64,
+        baby_model: Some(entity_model::bake_baby_pig_model()),
+        baby_tex_keys: Some(&["minecraft/textures/entity/pig/pig_temperate_baby.png"]),
+        baby_tex_size: 32,
+    }]
 }
 
 impl EntityRenderer {
@@ -88,6 +128,12 @@ impl EntityRenderer {
 
         let pipeline = create_pipeline(device, render_pass, pipeline_layout);
 
+        let defs = mob_definitions();
+        let tex_count: u32 = defs
+            .iter()
+            .map(|d| if d.baby_model.is_some() { 2 } else { 1 })
+            .sum();
+
         let pool_sizes = [
             vk::DescriptorPoolSize {
                 ty: vk::DescriptorType::UNIFORM_BUFFER,
@@ -95,11 +141,11 @@ impl EntityRenderer {
             },
             vk::DescriptorPoolSize {
                 ty: vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
-                descriptor_count: 2,
+                descriptor_count: tex_count,
             },
         ];
         let pool_info = vk::DescriptorPoolCreateInfo::default()
-            .max_sets((MAX_FRAMES_IN_FLIGHT + 2) as u32)
+            .max_sets(MAX_FRAMES_IN_FLIGHT as u32 + tex_count)
             .pool_sizes(&pool_sizes);
         let descriptor_pool = unsafe { device.create_descriptor_pool(&pool_info, None) }
             .expect("failed to create entity descriptor pool");
@@ -110,15 +156,6 @@ impl EntityRenderer {
             .set_layouts(&camera_layouts_vec);
         let camera_sets = unsafe { device.allocate_descriptor_sets(&camera_alloc_info) }
             .expect("failed to allocate entity camera descriptor sets");
-
-        let tex_layouts = [texture_layout, texture_layout];
-        let tex_alloc_info = vk::DescriptorSetAllocateInfo::default()
-            .descriptor_pool(descriptor_pool)
-            .set_layouts(&tex_layouts);
-        let tex_sets = unsafe { device.allocate_descriptor_sets(&tex_alloc_info) }
-            .expect("failed to allocate entity texture descriptor sets");
-        let adult_texture_set = tex_sets[0];
-        let baby_texture_set = tex_sets[1];
 
         let mut camera_buffers = Vec::with_capacity(MAX_FRAMES_IN_FLIGHT);
         let mut camera_allocations = Vec::with_capacity(MAX_FRAMES_IN_FLIGHT);
@@ -147,71 +184,46 @@ impl EntityRenderer {
             camera_allocations.push(alloc);
         }
 
-        let (adult_texture_image, adult_texture_view, adult_texture_allocation) =
-            load_entity_texture(
-                device,
-                queue,
-                command_pool,
-                allocator,
-                assets_dir,
-                asset_index,
-                &[
-                    "minecraft/textures/entity/pig/pig_temperate.png",
-                    "minecraft/textures/entity/pig/temperate_pig.png",
-                ],
-                "pig_adult_texture",
-                64,
-            );
-        let (baby_texture_image, baby_texture_view, baby_texture_allocation) =
-            load_entity_texture(
-                device,
-                queue,
-                command_pool,
-                allocator,
-                assets_dir,
-                asset_index,
-                &["minecraft/textures/entity/pig/pig_temperate_baby.png"],
-                "pig_baby_texture",
-                32,
-            );
         let texture_sampler = unsafe { util::create_nearest_sampler(device) };
 
-        for (set, view) in [
-            (adult_texture_set, adult_texture_view),
-            (baby_texture_set, baby_texture_view),
-        ] {
-            let image_info = [vk::DescriptorImageInfo {
-                sampler: texture_sampler,
-                image_view: view,
-                image_layout: vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
-            }];
-            let tex_write = vk::WriteDescriptorSet::default()
-                .dst_set(set)
-                .dst_binding(0)
-                .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
-                .image_info(&image_info);
-            unsafe { device.update_descriptor_sets(&[tex_write], &[]) };
+        let mut mobs = HashMap::new();
+
+        for def in defs {
+            let adult = create_mob_variant(
+                device,
+                queue,
+                command_pool,
+                allocator,
+                descriptor_pool,
+                texture_layout,
+                texture_sampler,
+                assets_dir,
+                asset_index,
+                def.adult_model,
+                def.adult_tex_keys,
+                def.adult_tex_size,
+            );
+
+            let baby = match (def.baby_model, def.baby_tex_keys) {
+                (Some(model), Some(keys)) => Some(create_mob_variant(
+                    device,
+                    queue,
+                    command_pool,
+                    allocator,
+                    descriptor_pool,
+                    texture_layout,
+                    texture_sampler,
+                    assets_dir,
+                    asset_index,
+                    model,
+                    keys,
+                    def.baby_tex_size,
+                )),
+                _ => None,
+            };
+
+            mobs.insert(def.kind, MobEntry { adult, baby });
         }
-
-        let adult_model = entity_model::bake_pig_model();
-        let adult_bytes = bytemuck::cast_slice::<ChunkVertex, u8>(&adult_model.vertices);
-        let (adult_vertex_buffer, adult_vertex_allocation) = util::create_mapped_buffer(
-            device,
-            allocator,
-            adult_bytes,
-            vk::BufferUsageFlags::VERTEX_BUFFER,
-            "entity_adult_vertices",
-        );
-
-        let baby_model = entity_model::bake_baby_pig_model();
-        let baby_bytes = bytemuck::cast_slice::<ChunkVertex, u8>(&baby_model.vertices);
-        let (baby_vertex_buffer, baby_vertex_allocation) = util::create_mapped_buffer(
-            device,
-            allocator,
-            baby_bytes,
-            vk::BufferUsageFlags::VERTEX_BUFFER,
-            "entity_baby_vertices",
-        );
 
         Self {
             pipeline,
@@ -220,23 +232,10 @@ impl EntityRenderer {
             texture_layout,
             descriptor_pool,
             camera_sets,
-            adult_texture_set,
-            baby_texture_set,
             camera_buffers,
             camera_allocations,
-            adult_vertex_buffer,
-            adult_vertex_allocation,
-            adult_model,
-            baby_vertex_buffer,
-            baby_vertex_allocation,
-            baby_model,
-            adult_texture_image,
-            adult_texture_view,
-            baby_texture_image,
-            baby_texture_view,
             texture_sampler,
-            adult_texture_allocation,
-            baby_texture_allocation,
+            mobs,
         }
     }
 
@@ -260,52 +259,45 @@ impl EntityRenderer {
         unsafe {
             device.cmd_bind_pipeline(cmd, vk::PipelineBindPoint::GRAPHICS, self.pipeline);
 
-            let mut last_baby = None;
+            let mut last_variant: *const MobVariant = std::ptr::null();
             for info in entities {
-                let (model, vertex_buffer, texture_set) = if info.is_baby {
-                    (
-                        &self.baby_model,
-                        self.baby_vertex_buffer,
-                        self.baby_texture_set,
-                    )
-                } else {
-                    (
-                        &self.adult_model,
-                        self.adult_vertex_buffer,
-                        self.adult_texture_set,
-                    )
+                let Some(entry) = self.mobs.get(&info.entity_kind) else {
+                    continue;
                 };
+                let variant = entry.variant(info.is_baby);
 
-                if last_baby != Some(info.is_baby) {
+                let variant_ptr: *const MobVariant = variant;
+                if last_variant != variant_ptr {
                     device.cmd_bind_descriptor_sets(
                         cmd,
                         vk::PipelineBindPoint::GRAPHICS,
                         self.pipeline_layout,
                         0,
-                        &[self.camera_sets[frame], texture_set],
+                        &[self.camera_sets[frame], variant.texture_set],
                         &[],
                     );
-                    device.cmd_bind_vertex_buffers(cmd, 0, &[vertex_buffer], &[0]);
-                    last_baby = Some(info.is_baby);
+                    device.cmd_bind_vertex_buffers(cmd, 0, &[variant.vertex_buffer], &[0]);
+                    last_variant = variant_ptr;
                 }
 
-                let entity_mat = glam::Mat4::from_translation(glam::Vec3::new(
-                    info.x as f32,
-                    info.y as f32,
-                    info.z as f32,
-                )) * glam::Mat4::from_rotation_y((180.0f32 - info.yaw).to_radians());
+                let entity_mat =
+                    glam::Mat4::from_translation(glam::Vec3::new(
+                        info.x as f32,
+                        info.y as f32,
+                        info.z as f32,
+                    )) * glam::Mat4::from_rotation_y((180.0f32 - info.yaw).to_radians());
 
                 let anim_rotations = entity_model::compute_quadruped_anim(
-                    model,
+                    &variant.model,
                     info.pitch,
                     info.head_yaw - info.yaw,
                     info.walk_anim_pos,
                     info.walk_anim_speed,
                 );
 
-                let part_transforms = model.compute_part_transforms(&anim_rotations);
+                let part_transforms = variant.model.compute_part_transforms(&anim_rotations);
 
-                for (i, (start, count)) in model.part_ranges.iter().enumerate() {
+                for (i, (start, count)) in variant.model.part_ranges.iter().enumerate() {
                     if *count == 0 {
                         continue;
                     }
@@ -344,29 +336,27 @@ impl EntityRenderer {
                 .ok();
         }
 
-        for (buf, allocation) in [
-            (&self.adult_vertex_buffer, &mut self.adult_vertex_allocation),
-            (&self.baby_vertex_buffer, &mut self.baby_vertex_allocation),
-        ] {
-            unsafe { device.destroy_buffer(*buf, None) };
-            alloc
-                .free(std::mem::replace(allocation, unsafe { std::mem::zeroed() }))
-                .ok();
-        }
+        unsafe { device.destroy_sampler(self.texture_sampler, None) };
 
-        unsafe {
-            device.destroy_sampler(self.texture_sampler, None);
-            device.destroy_image_view(self.adult_texture_view, None);
-            device.destroy_image_view(self.baby_texture_view, None);
-        }
-        for (img, allocation) in [
-            (self.adult_texture_image, &mut self.adult_texture_allocation),
-            (self.baby_texture_image, &mut self.baby_texture_allocation),
-        ] {
-            alloc
-                .free(std::mem::replace(allocation, unsafe { std::mem::zeroed() }))
-                .ok();
-            unsafe { device.destroy_image(img, None) };
+        for entry in self.mobs.values_mut() {
+            let variants: Vec<&mut MobVariant> = std::iter::once(&mut entry.adult)
+                .chain(entry.baby.iter_mut())
+                .collect();
+            for v in variants {
+                unsafe { device.destroy_buffer(v.vertex_buffer, None) };
+                alloc
+                    .free(std::mem::replace(&mut v.vertex_allocation, unsafe {
+                        std::mem::zeroed()
+                    }))
+                    .ok();
+                unsafe { device.destroy_image_view(v.texture_view, None) };
+                alloc
+                    .free(std::mem::replace(&mut v.texture_allocation, unsafe {
+                        std::mem::zeroed()
+                    }))
+                    .ok();
+                unsafe { device.destroy_image(v.texture_image, None) };
+            }
         }
 
         drop(alloc);
@@ -382,6 +372,71 @@ impl EntityRenderer {
 }
 
 #[allow(clippy::too_many_arguments)]
+fn create_mob_variant(
+    device: &ash::Device,
+    queue: vk::Queue,
+    command_pool: vk::CommandPool,
+    allocator: &Arc<Mutex<Allocator>>,
+    descriptor_pool: vk::DescriptorPool,
+    texture_layout: vk::DescriptorSetLayout,
+    texture_sampler: vk::Sampler,
+    assets_dir: &Path,
+    asset_index: &Option<AssetIndex>,
+    model: BakedEntityModel,
+    tex_keys: &[&str],
+    fallback_tex_size: u32,
+) -> MobVariant {
+    let vert_bytes = bytemuck::cast_slice::<ChunkVertex, u8>(&model.vertices);
+    let (vertex_buffer, vertex_allocation) = util::create_mapped_buffer(
+        device,
+        allocator,
+        vert_bytes,
+        vk::BufferUsageFlags::VERTEX_BUFFER,
+        "entity_vertices",
+    );
+
+    let (texture_image, texture_view, texture_allocation) = load_entity_texture(
+        device,
+        queue,
+        command_pool,
+        allocator,
+        assets_dir,
+        asset_index,
+        tex_keys,
+        fallback_tex_size,
+    );
+
+    let tex_layouts = [texture_layout];
+    let tex_alloc_info = vk::DescriptorSetAllocateInfo::default()
+        .descriptor_pool(descriptor_pool)
+        .set_layouts(&tex_layouts);
+    let texture_set = unsafe { device.allocate_descriptor_sets(&tex_alloc_info) }
+        .expect("failed to allocate entity texture descriptor set")[0];
+
+    let image_info = [vk::DescriptorImageInfo {
+        sampler: texture_sampler,
+        image_view: texture_view,
+        image_layout: vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
+    }];
+    let tex_write = vk::WriteDescriptorSet::default()
+        .dst_set(texture_set)
+        .dst_binding(0)
+        .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+        .image_info(&image_info);
+    unsafe { device.update_descriptor_sets(&[tex_write], &[]) };
+
+    MobVariant {
+        model,
+        vertex_buffer,
+        vertex_allocation,
+        texture_image,
+        texture_view,
+        texture_allocation,
+        texture_set,
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
 fn load_entity_texture(
     device: &ash::Device,
     queue: vk::Queue,
@@ -390,7 +445,6 @@ fn load_entity_texture(
     assets_dir: &Path,
     asset_index: &Option<AssetIndex>,
     asset_keys: &[&str],
-    label: &str,
     fallback_size: u32,
 ) -> (vk::Image, vk::ImageView, Allocation) {
     let (pixels, width, height) = asset_keys
@@ -400,15 +454,26 @@ fn load_entity_texture(
             util::load_png(&path)
         })
         .unwrap_or_else(|| {
-            log::warn!("Failed to load entity texture {:?}, using fallback", asset_keys);
+            log::warn!(
+                "Failed to load entity texture {:?}, using fallback",
+                asset_keys
+            );
             fallback_texture(fallback_size)
         });
 
     let (image, view, allocation) =
-        util::create_gpu_image(device, allocator, width, height, label);
+        util::create_gpu_image(device, allocator, width, height, "entity_texture");
     let (staging_buf, staging_alloc) =
-        util::create_staging_buffer(device, allocator, &pixels, &format!("{label}_staging"));
-    util::upload_image(device, queue, command_pool, staging_buf, image, width, height);
+        util::create_staging_buffer(device, allocator, &pixels, "entity_texture_staging");
+    util::upload_image(
+        device,
+        queue,
+        command_pool,
+        staging_buf,
+        image,
+        width,
+        height,
+    );
     unsafe { device.destroy_buffer(staging_buf, None) };
     allocator.lock().unwrap().free(staging_alloc).ok();
     (image, view, allocation)
