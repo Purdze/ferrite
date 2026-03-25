@@ -77,9 +77,21 @@ impl MeshDispatcher {
         let min_y = chunk_store.min_y();
         let height = chunk_store.height();
 
+        let light: std::collections::HashMap<(i32, i32), crate::world::chunk::ChunkLightData> =
+            chunks_needed
+                .iter()
+                .filter_map(|p| {
+                    chunk_store
+                        .light_data
+                        .get(&(p.x, p.z))
+                        .map(|ld| ((p.x, p.z), ld.clone()))
+                })
+                .collect();
+
         rayon::spawn(move || {
             let snapshot = ChunkStoreSnapshot {
                 chunks: chunks_needed.into_iter().zip(chunk_arcs).collect(),
+                light,
                 min_y,
                 height,
             };
@@ -98,6 +110,7 @@ struct ChunkStoreSnapshot {
         ChunkPos,
         Option<Arc<parking_lot::RwLock<azalea_world::Chunk>>>,
     )>,
+    light: std::collections::HashMap<(i32, i32), crate::world::chunk::ChunkLightData>,
     min_y: i32,
     height: u32,
 }
@@ -126,7 +139,50 @@ impl ChunkStoreSnapshot {
     fn height(&self) -> u32 {
         self.height
     }
+
+    fn get_biome(&self, x: i32, y: i32, z: i32) -> azalea_registry::data::Biome {
+        let chunk_pos = ChunkPos::new(x.div_euclid(16), z.div_euclid(16));
+        let chunk_lock = self
+            .chunks
+            .iter()
+            .find(|(p, _)| *p == chunk_pos)
+            .and_then(|(_, c)| c.as_ref());
+        let Some(chunk_lock) = chunk_lock else {
+            return azalea_registry::data::Biome::default();
+        };
+        let c = chunk_lock.read();
+        let biome_pos = azalea_core::position::ChunkBiomePos {
+            x: (x.rem_euclid(16) / 4) as u8,
+            y,
+            z: (z.rem_euclid(16) / 4) as u8,
+        };
+        c.get_biome(biome_pos, self.min_y).unwrap_or_default()
+    }
+
+    fn get_light(&self, x: i32, y: i32, z: i32) -> f32 {
+        let cx = x.div_euclid(16);
+        let cz = z.div_euclid(16);
+        let lx = x.rem_euclid(16);
+        let lz = z.rem_euclid(16);
+        let sky = if let Some(light) = self.light.get(&(cx, cz)) {
+            light.get_sky_light(lx, y, lz)
+        } else {
+            15
+        };
+        let block = if let Some(light) = self.light.get(&(cx, cz)) {
+            light.get_block_light(lx, y, lz)
+        } else {
+            0
+        };
+        let level = sky.max(block);
+        LIGHT_TABLE[level as usize]
+    }
 }
+
+const LIGHT_TABLE: [f32; 16] = [
+    0.05, 0.067, 0.085, 0.106, 0.129, 0.156, 0.188, 0.227, 0.272, 0.328, 0.393, 0.472, 0.566,
+    0.679, 0.815, 1.0,
+];
 
 struct GreedyBlockInfo {
     textures: FaceTextures,
@@ -209,8 +265,8 @@ fn greedy_face_light(face: bgm::Face) -> f32 {
     match face {
         bgm::Face::Up => 1.0,
         bgm::Face::Down => 0.5,
-        bgm::Face::Right | bgm::Face::Left => 0.8,
-        bgm::Face::Front | bgm::Face::Back => 0.7,
+        bgm::Face::Front | bgm::Face::Back => 0.8,
+        bgm::Face::Right | bgm::Face::Left => 0.6,
     }
 }
 
@@ -318,14 +374,7 @@ fn mesh_chunk_snapshot(
     let world_x = pos.x * 16;
     let world_z = pos.z * 16;
 
-    let type_map = if lod == 0 {
-        Some(BlockTypeMap::build(
-            snapshot, registry, world_x, world_z, min_y, max_y,
-        ))
-    } else {
-        None
-    };
-
+    let type_map: Option<BlockTypeMap> = None;
     if let Some(ref tm) = type_map {
         let sections = (max_y - min_y) / 16;
         for section in 0..sections {
@@ -497,13 +546,18 @@ fn emit_baked_model(
 
         let region = uv_map.get_region(&quad.texture);
         let tint = if quad.tinted { GRASS_TINT } else { WHITE };
+        let lights = if let Some(dir) = quad.cullface {
+            compute_face_ao(snapshot, bx, by, bz, dir)
+        } else {
+            [quad.shade_light; 4]
+        };
         emit_face(
             vertices,
             indices,
             block_pos,
             &quad.positions,
             &quad.uvs,
-            quad.shade_light,
+            lights,
             region,
             tint,
         );
@@ -541,12 +595,13 @@ fn emit_cube_faces(
             _ => &textures.west,
         };
         let region = uv_map.get_region(face_tex);
-        let (positions, uvs, light) = cube_face_geometry(*dir);
+        let (positions, uvs, _) = cube_face_geometry(*dir);
+        let lights = compute_face_ao(snapshot, bx, by, bz, *dir);
 
         let is_side = i >= 2;
         if let Some(overlay) = textures.side_overlay.as_deref().filter(|_| is_side) {
             emit_face(
-                vertices, indices, block_pos, &positions, &uvs, light, region, WHITE,
+                vertices, indices, block_pos, &positions, &uvs, lights, region, WHITE,
             );
             let overlay_region = uv_map.get_region(overlay);
             emit_face(
@@ -555,7 +610,7 @@ fn emit_cube_faces(
                 block_pos,
                 &positions,
                 &uvs,
-                light,
+                lights,
                 overlay_region,
                 tint,
             );
@@ -564,7 +619,7 @@ fn emit_cube_faces(
                 !matches!(textures.tint, Tint::None) && (textures.side_overlay.is_none() || i == 0);
             let face_tint = if is_tinted { tint } else { WHITE };
             emit_face(
-                vertices, indices, block_pos, &positions, &uvs, light, region, face_tint,
+                vertices, indices, block_pos, &positions, &uvs, lights, region, face_tint,
             );
         }
     }
@@ -644,7 +699,7 @@ fn emit_fluid(
         }
 
         emit_face(
-            vertices, indices, block_pos, &positions, &uvs, light, region, tint,
+            vertices, indices, block_pos, &positions, &uvs, [light; 4], region, tint,
         );
     }
 }
@@ -679,7 +734,7 @@ fn emit_multipart(
             block_pos,
             &quad.positions,
             &quad.uvs,
-            quad.shade_light,
+            [quad.shade_light; 4],
             region,
             tint,
         );
@@ -794,7 +849,7 @@ fn emit_face(
     block_pos: [f32; 3],
     positions: &[[f32; 3]; 4],
     uvs: &[[f32; 2]; 4],
-    light: f32,
+    lights: [f32; 4],
     region: AtlasRegion,
     tint: [f32; 3],
 ) {
@@ -813,12 +868,92 @@ fn emit_face(
                 region.u_min + uvs[i][0] * u_span,
                 region.v_min + uvs[i][1] * v_span,
             ],
-            light,
+            light: lights[i],
             tint,
         });
     }
 
-    indices.extend_from_slice(&[base, base + 1, base + 2, base + 2, base + 3, base]);
+    if lights[0] + lights[2] > lights[1] + lights[3] {
+        indices.extend_from_slice(&[base + 1, base + 2, base + 3, base + 3, base, base + 1]);
+    } else {
+        indices.extend_from_slice(&[base, base + 1, base + 2, base + 2, base + 3, base]);
+    }
+}
+
+fn shade_brightness(state: azalea_block::BlockState) -> f32 {
+    if state.is_air() {
+        1.0
+    } else {
+        0.2
+    }
+}
+
+fn vertex_ao(side1: f32, side2: f32, corner: f32) -> f32 {
+    (side1 + side2 + corner + 1.0) * 0.25
+}
+
+fn compute_face_ao(
+    snapshot: &ChunkStoreSnapshot,
+    bx: i32,
+    by: i32,
+    bz: i32,
+    dir: Direction,
+) -> [f32; 4] {
+    let s = |dx: i32, dy: i32, dz: i32| -> f32 {
+        shade_brightness(snapshot.get_block_state(bx + dx, by + dy, bz + dz))
+    };
+    let dir_shade = match dir {
+        Direction::Up => 1.0,
+        Direction::Down => 0.5,
+        Direction::North | Direction::South => 0.8,
+        Direction::East | Direction::West => 0.6,
+    };
+    let offset = dir.offset();
+    let base_light = snapshot.get_light(bx + offset[0], by + offset[1], bz + offset[2]) * dir_shade;
+    let ao = match dir {
+        Direction::Up => [
+            vertex_ao(s(0, 1, 1), s(-1, 1, 0), s(-1, 1, 1)),
+            vertex_ao(s(0, 1, 1), s(1, 1, 0), s(1, 1, 1)),
+            vertex_ao(s(0, 1, -1), s(1, 1, 0), s(1, 1, -1)),
+            vertex_ao(s(0, 1, -1), s(-1, 1, 0), s(-1, 1, -1)),
+        ],
+        Direction::Down => [
+            vertex_ao(s(0, -1, -1), s(-1, -1, 0), s(-1, -1, -1)),
+            vertex_ao(s(0, -1, -1), s(1, -1, 0), s(1, -1, -1)),
+            vertex_ao(s(0, -1, 1), s(1, -1, 0), s(1, -1, 1)),
+            vertex_ao(s(0, -1, 1), s(-1, -1, 0), s(-1, -1, 1)),
+        ],
+        Direction::North => [
+            vertex_ao(s(-1, 0, -1), s(0, -1, -1), s(-1, -1, -1)),
+            vertex_ao(s(-1, 0, -1), s(0, 1, -1), s(-1, 1, -1)),
+            vertex_ao(s(1, 0, -1), s(0, 1, -1), s(1, 1, -1)),
+            vertex_ao(s(1, 0, -1), s(0, -1, -1), s(1, -1, -1)),
+        ],
+        Direction::South => [
+            vertex_ao(s(1, 0, 1), s(0, -1, 1), s(1, -1, 1)),
+            vertex_ao(s(1, 0, 1), s(0, 1, 1), s(1, 1, 1)),
+            vertex_ao(s(-1, 0, 1), s(0, 1, 1), s(-1, 1, 1)),
+            vertex_ao(s(-1, 0, 1), s(0, -1, 1), s(-1, -1, 1)),
+        ],
+        Direction::East => [
+            vertex_ao(s(1, 0, -1), s(1, -1, 0), s(1, -1, -1)),
+            vertex_ao(s(1, 0, -1), s(1, 1, 0), s(1, 1, -1)),
+            vertex_ao(s(1, 0, 1), s(1, 1, 0), s(1, 1, 1)),
+            vertex_ao(s(1, 0, 1), s(1, -1, 0), s(1, -1, 1)),
+        ],
+        Direction::West => [
+            vertex_ao(s(-1, 0, 1), s(-1, -1, 0), s(-1, -1, 1)),
+            vertex_ao(s(-1, 0, 1), s(-1, 1, 0), s(-1, 1, 1)),
+            vertex_ao(s(-1, 0, -1), s(-1, 1, 0), s(-1, 1, -1)),
+            vertex_ao(s(-1, 0, -1), s(-1, -1, 0), s(-1, -1, -1)),
+        ],
+    };
+    [
+        ao[0] * base_light,
+        ao[1] * base_light,
+        ao[2] * base_light,
+        ao[3] * base_light,
+    ]
 }
 
 fn cube_face_geometry(dir: Direction) -> ([[f32; 3]; 4], [[f32; 2]; 4], f32) {
@@ -851,7 +986,7 @@ fn cube_face_geometry(dir: Direction) -> ([[f32; 3]; 4], [[f32; 2]; 4], f32) {
                 [1.0, 0.0, 0.0],
             ],
             [[0.0, 1.0], [0.0, 0.0], [1.0, 0.0], [1.0, 1.0]],
-            0.7,
+            0.8,
         ),
         Direction::South => (
             [
@@ -861,7 +996,7 @@ fn cube_face_geometry(dir: Direction) -> ([[f32; 3]; 4], [[f32; 2]; 4], f32) {
                 [0.0, 0.0, 1.0],
             ],
             [[1.0, 1.0], [1.0, 0.0], [0.0, 0.0], [0.0, 1.0]],
-            0.7,
+            0.8,
         ),
         Direction::East => (
             [
@@ -871,7 +1006,7 @@ fn cube_face_geometry(dir: Direction) -> ([[f32; 3]; 4], [[f32; 2]; 4], f32) {
                 [1.0, 0.0, 1.0],
             ],
             [[1.0, 1.0], [1.0, 0.0], [0.0, 0.0], [0.0, 1.0]],
-            0.8,
+            0.6,
         ),
         Direction::West => (
             [
@@ -881,7 +1016,7 @@ fn cube_face_geometry(dir: Direction) -> ([[f32; 3]; 4], [[f32; 2]; 4], f32) {
                 [0.0, 0.0, 0.0],
             ],
             [[1.0, 1.0], [1.0, 0.0], [0.0, 0.0], [0.0, 1.0]],
-            0.8,
+            0.6,
         ),
     }
 }

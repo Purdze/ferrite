@@ -371,11 +371,22 @@ impl App {
                     pos,
                     data,
                     heightmaps,
+                    sky_light,
+                    block_light,
+                    sky_y_mask,
+                    block_y_mask,
                 } => {
                     if let Err(e) = self.chunk_store.load_chunk(pos, &data, &heightmaps) {
                         log::error!("Failed to load chunk [{}, {}]: {e}", pos.x, pos.z);
                         continue;
                     }
+                    self.chunk_store.store_light(
+                        pos,
+                        &sky_light,
+                        &block_light,
+                        &sky_y_mask,
+                        &block_y_mask,
+                    );
                     chunks_to_mesh.push(pos);
                 }
                 NetworkEvent::ChunkUnloaded { pos } => {
