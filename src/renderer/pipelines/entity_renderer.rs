@@ -40,6 +40,7 @@ struct MobVariant {
 struct MobEntry {
     adult: MobVariant,
     baby: Option<MobVariant>,
+    anim: AnimationType,
 }
 
 impl MobEntry {
@@ -65,8 +66,15 @@ pub struct EntityRenderer {
     mobs: HashMap<EntityKind, MobEntry>,
 }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum AnimationType {
+    Quadruped,
+    Humanoid,
+}
+
 struct MobDef {
     kind: EntityKind,
+    anim: AnimationType,
     adult_model: BakedEntityModel,
     adult_tex_keys: &'static [&'static str],
     adult_tex_size: u32,
@@ -76,18 +84,31 @@ struct MobDef {
 }
 
 fn mob_definitions() -> Vec<MobDef> {
-    vec![MobDef {
-        kind: EntityKind::Pig,
-        adult_model: entity_model::bake_pig_model(),
-        adult_tex_keys: &[
-            "minecraft/textures/entity/pig/pig_temperate.png",
-            "minecraft/textures/entity/pig/temperate_pig.png",
-        ],
-        adult_tex_size: 64,
-        baby_model: Some(entity_model::bake_baby_pig_model()),
-        baby_tex_keys: Some(&["minecraft/textures/entity/pig/pig_temperate_baby.png"]),
-        baby_tex_size: 32,
-    }]
+    vec![
+        MobDef {
+            kind: EntityKind::Pig,
+            anim: AnimationType::Quadruped,
+            adult_model: entity_model::bake_pig_model(),
+            adult_tex_keys: &[
+                "minecraft/textures/entity/pig/pig_temperate.png",
+                "minecraft/textures/entity/pig/temperate_pig.png",
+            ],
+            adult_tex_size: 64,
+            baby_model: Some(entity_model::bake_baby_pig_model()),
+            baby_tex_keys: Some(&["minecraft/textures/entity/pig/pig_temperate_baby.png"]),
+            baby_tex_size: 32,
+        },
+        MobDef {
+            kind: EntityKind::Player,
+            anim: AnimationType::Humanoid,
+            adult_model: entity_model::bake_player_model(),
+            adult_tex_keys: &["minecraft/textures/entity/player/wide/steve.png"],
+            adult_tex_size: 64,
+            baby_model: None,
+            baby_tex_keys: None,
+            baby_tex_size: 64,
+        },
+    ]
 }
 
 impl EntityRenderer {
@@ -222,7 +243,14 @@ impl EntityRenderer {
                 _ => None,
             };
 
-            mobs.insert(def.kind, MobEntry { adult, baby });
+            mobs.insert(
+                def.kind,
+                MobEntry {
+                    adult,
+                    baby,
+                    anim: def.anim,
+                },
+            );
         }
 
         Self {
@@ -280,20 +308,29 @@ impl EntityRenderer {
                     last_variant = variant_ptr;
                 }
 
-                let entity_mat =
-                    glam::Mat4::from_translation(glam::Vec3::new(
-                        info.x as f32,
-                        info.y as f32,
-                        info.z as f32,
-                    )) * glam::Mat4::from_rotation_y((180.0f32 - info.yaw).to_radians());
+                let entity_mat = glam::Mat4::from_translation(glam::Vec3::new(
+                    info.x as f32,
+                    info.y as f32,
+                    info.z as f32,
+                )) * glam::Mat4::from_scale(glam::Vec3::new(-1.0, -1.0, 1.0))
+                    * glam::Mat4::from_rotation_y((180.0f32 - info.yaw).to_radians());
 
-                let anim_rotations = entity_model::compute_quadruped_anim(
-                    &variant.model,
-                    info.pitch,
-                    info.head_yaw - info.yaw,
-                    info.walk_anim_pos,
-                    info.walk_anim_speed,
-                );
+                let anim_rotations = match entry.anim {
+                    AnimationType::Quadruped => entity_model::compute_quadruped_anim(
+                        &variant.model,
+                        info.pitch,
+                        info.head_yaw - info.yaw,
+                        info.walk_anim_pos,
+                        info.walk_anim_speed,
+                    ),
+                    AnimationType::Humanoid => entity_model::compute_humanoid_anim(
+                        &variant.model,
+                        info.pitch,
+                        info.head_yaw - info.yaw,
+                        info.walk_anim_pos,
+                        info.walk_anim_speed,
+                    ),
+                };
 
                 let part_transforms = variant.model.compute_part_transforms(&anim_rotations);
 

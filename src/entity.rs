@@ -219,7 +219,8 @@ fn lerp_angle(from: f32, to: f32, alpha: f32) -> f32 {
 pub fn is_living_mob(kind: &EntityKind) -> bool {
     matches!(
         kind,
-        EntityKind::Pig
+        EntityKind::Player
+            | EntityKind::Pig
             | EntityKind::Cow
             | EntityKind::Sheep
             | EntityKind::Chicken
