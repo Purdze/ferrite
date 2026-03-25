@@ -8,6 +8,7 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   client:
@@ -29,6 +30,62 @@ jobs:
 
       - name: Clippy
         run: cargo clippy --release --all-targets --all-features -- -D warnings
+
+      - name: Build
+        run: cargo build --release
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: pomc-client-windows
+          path: target/release/pomc.exe
+
+  client-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@nightly
+
+      - name: Install Vulkan dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libvulkan-dev libxkbcommon-dev libwayland-dev
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: client-linux
+          cache-on-failure: true
+
+      - name: Build
+        run: cargo build --release
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: pomc-client-linux
+          path: target/release/pomc
+
+  client-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@nightly
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: client-macos
+          cache-on-failure: true
+
+      - name: Build
+        run: cargo build --release
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: pomc-client-macos
+          path: target/release/pomc
 
   launcher-backend:
     runs-on: windows-latest
@@ -87,3 +144,40 @@ jobs:
       - name: Build
         working-directory: launcher
         run: pnpm exec vite build
+
+  launcher-build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@nightly
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: launcher/src-tauri
+          shared-key: launcher-build
+          cache-on-failure: true
+
+      - uses: pnpm/action-setup@v5
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: launcher/pnpm-lock.yaml
+
+      - name: Install dependencies
+        working-directory: launcher
+        run: pnpm install
+
+      - name: Build launcher
+        working-directory: launcher
+        run: pnpm tauri build
+
+      - name: Upload launcher installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: pomc-launcher-windows
+          path: launcher/src-tauri/target/release/bundle/nsis/*.exe

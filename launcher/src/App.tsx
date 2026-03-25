@@ -94,7 +94,7 @@ function App() {
         }
       })
       .catch((e) => console.error("Failed to fetch versions:", e));
-  }, [loadSkin, setAccounts, setActiveIndex, setNews, setVersions]);
+  }, [loadSkin, setAccounts, setActiveIndex, setInstallations, setNews, setVersions]);
 
   useEffect(() => {
     requestAnimationFrame(() => getCurrentWindow().show());
