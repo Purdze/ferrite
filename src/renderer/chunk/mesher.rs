@@ -104,15 +104,12 @@ fn apply_grass_modifier(modifier: GrassColorModifier, base: [f32; 3], x: i32, z:
     match modifier {
         GrassColorModifier::None => base,
         GrassColorModifier::DarkForest => {
-            // Vanilla: ((baseColor & 0xFEFEFE) + 0x28340A) >> 1
             let r = ((to_u8(base[0]) & 0xFE) as u32 + 0x28) >> 1;
             let g = ((to_u8(base[1]) & 0xFE) as u32 + 0x34) >> 1;
             let b = ((to_u8(base[2]) & 0xFE) as u32 + 0x0A) >> 1;
             [r.min(255) as f32 / 255.0, g.min(255) as f32 / 255.0, b.min(255) as f32 / 255.0]
         }
         GrassColorModifier::Swamp => {
-            // Vanilla: perlin noise at (x * 0.0225, z * 0.0225)
-            // < -0.1 → 0x4C763C, else → 0x6A7039
             let noise = simple_hash_noise(x as f64 * 0.0225, z as f64 * 0.0225);
             if noise < -0.1 {
                 [0x4C as f32 / 255.0, 0x76 as f32 / 255.0, 0x3C as f32 / 255.0]
@@ -127,7 +124,6 @@ fn to_u8(f: f32) -> u8 {
     (f * 255.0).round() as u8
 }
 
-/// Simple deterministic noise approximation for swamp grass color selection.
 fn simple_hash_noise(x: f64, z: f64) -> f64 {
     let ix = (x * 1000.0) as i64;
     let iz = (z * 1000.0) as i64;
@@ -287,33 +283,27 @@ impl ChunkStoreSnapshot {
         c.get_biome(biome_pos, self.min_y).unwrap_or_default()
     }
 
-    fn grass_color_at(&self, x: i32, y: i32, z: i32) -> [f32; 3] {
+    fn climate_at(&self, x: i32, y: i32, z: i32) -> BiomeClimate {
         let biome = self.get_biome(x, y, z);
-        let climate = self
-            .biome_climate
+        self.biome_climate
             .get(&u32::from(biome))
             .copied()
-            .unwrap_or_default();
-        let base = if let Some(ovr) = climate.grass_color_override {
-            ovr
-        } else {
-            self.grass_colormap.lookup(climate.temperature, climate.downfall)
-        };
+            .unwrap_or_default()
+    }
+
+    fn grass_color_at(&self, x: i32, y: i32, z: i32) -> [f32; 3] {
+        let climate = self.climate_at(x, y, z);
+        let base = climate
+            .grass_color_override
+            .unwrap_or_else(|| self.grass_colormap.lookup(climate.temperature, climate.downfall));
         apply_grass_modifier(climate.grass_color_modifier, base, x, z)
     }
 
     fn foliage_color_at(&self, x: i32, y: i32, z: i32) -> [f32; 3] {
-        let biome = self.get_biome(x, y, z);
-        let climate = self
-            .biome_climate
-            .get(&u32::from(biome))
-            .copied()
-            .unwrap_or_default();
-        if let Some(ovr) = climate.foliage_color_override {
-            ovr
-        } else {
-            self.foliage_colormap.lookup(climate.temperature, climate.downfall)
-        }
+        let climate = self.climate_at(x, y, z);
+        climate
+            .foliage_color_override
+            .unwrap_or_else(|| self.foliage_colormap.lookup(climate.temperature, climate.downfall))
     }
 
     fn grass_tint(&self, x: i32, y: i32, z: i32) -> [f32; 3] {
@@ -346,17 +336,11 @@ impl ChunkStoreSnapshot {
         let cz = z.div_euclid(16);
         let lx = x.rem_euclid(16);
         let lz = z.rem_euclid(16);
-        let sky = if let Some(light) = self.light.get(&(cx, cz)) {
-            light.get_sky_light(lx, y, lz)
+        let level = if let Some(light) = self.light.get(&(cx, cz)) {
+            light.get_sky_light(lx, y, lz).max(light.get_block_light(lx, y, lz))
         } else {
             15
         };
-        let block = if let Some(light) = self.light.get(&(cx, cz)) {
-            light.get_block_light(lx, y, lz)
-        } else {
-            0
-        };
-        let level = sky.max(block);
         LIGHT_TABLE[level as usize]
     }
 }
@@ -1098,8 +1082,6 @@ fn compute_face_ao(
         Direction::East | Direction::West => 0.6,
     };
 
-    // For each vertex: compute AO from 3 neighbors, and average light from 4 neighbors
-    // (the face-normal block + the same 3 used for AO).
     let (ao, lights) = match dir {
         Direction::Up => {
             let n = [0, 1, 0];
