@@ -249,6 +249,7 @@ impl Renderer {
             &ctx.device,
             &ctx.instance,
             ctx.physical_device,
+            ctx.graphics_family,
             &ctx.allocator,
         );
 
@@ -558,7 +559,8 @@ impl Renderer {
     }
 
     pub fn upload_chunk_mesh(&mut self, mesh: &ChunkMeshData) {
-        self.chunk_buffers.upload(mesh);
+        self.chunk_buffers
+            .upload(&self.ctx.device, self.ctx.graphics_queue, mesh);
     }
 
     pub fn remove_chunk_mesh(&mut self, pos: &ChunkPos) {

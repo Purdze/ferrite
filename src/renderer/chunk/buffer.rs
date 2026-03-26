@@ -95,6 +95,12 @@ pub struct ChunkBufferStore {
     vertex_alloc: Allocation,
     index_buffer: vk::Buffer,
     index_alloc: Allocation,
+    staging_buffer: vk::Buffer,
+    staging_alloc: Allocation,
+    staging_size: u64,
+    transfer_pool: vk::CommandPool,
+    transfer_cmd: vk::CommandBuffer,
+    use_staging: bool,
 
     free_buckets: VecDeque<u32>,
     chunks: HashMap<ChunkPos, ChunkAlloc>,
@@ -122,25 +128,84 @@ impl ChunkBufferStore {
         device: &ash::Device,
         instance: &ash::Instance,
         physical_device: vk::PhysicalDevice,
+        graphics_family: u32,
         allocator: &Arc<Mutex<Allocator>>,
     ) -> Self {
         let total_buckets = compute_bucket_count(instance, physical_device);
         let vertex_size = total_buckets as u64 * BUCKET_VERTICES as u64 * VERTEX_SIZE;
         let index_size = total_buckets as u64 * BUCKET_INDICES as u64 * INDEX_SIZE;
 
-        let (vertex_buffer, vertex_alloc) = util::create_host_buffer(
+        let dev_props = unsafe { instance.get_physical_device_properties(physical_device) };
+        let use_staging = dev_props.device_type == vk::PhysicalDeviceType::DISCRETE_GPU;
+
+        let (vertex_buffer, vertex_alloc, index_buffer, index_alloc) = if use_staging {
+            let (vb, va) = util::create_device_buffer(
+                device,
+                allocator,
+                vertex_size,
+                vk::BufferUsageFlags::VERTEX_BUFFER,
+                "vertex_pool",
+            );
+            let (ib, ia) = util::create_device_buffer(
+                device,
+                allocator,
+                index_size,
+                vk::BufferUsageFlags::INDEX_BUFFER,
+                "index_pool",
+            );
+            (vb, va, ib, ia)
+        } else {
+            let (vb, va) = util::create_host_buffer(
+                device,
+                allocator,
+                vertex_size,
+                vk::BufferUsageFlags::VERTEX_BUFFER,
+                "vertex_pool",
+            );
+            let (ib, ia) = util::create_host_buffer(
+                device,
+                allocator,
+                index_size,
+                vk::BufferUsageFlags::INDEX_BUFFER,
+                "index_pool",
+            );
+            (vb, va, ib, ia)
+        };
+
+        let staging_size = BYTES_PER_BUCKET * 4;
+        let (staging_buffer, staging_alloc) = util::create_host_buffer(
             device,
             allocator,
-            vertex_size,
-            vk::BufferUsageFlags::VERTEX_BUFFER,
-            "vertex_pool",
+            staging_size,
+            vk::BufferUsageFlags::TRANSFER_SRC,
+            "staging",
         );
-        let (index_buffer, index_alloc) = util::create_host_buffer(
-            device,
-            allocator,
-            index_size,
-            vk::BufferUsageFlags::INDEX_BUFFER,
-            "index_pool",
+
+        let pool_info = vk::CommandPoolCreateInfo::default()
+            .queue_family_index(graphics_family)
+            .flags(
+                vk::CommandPoolCreateFlags::TRANSIENT
+                    | vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER,
+            );
+        let transfer_pool = unsafe { device.create_command_pool(&pool_info, None) }
+            .expect("failed to create transfer pool");
+        let cmd_info = vk::CommandBufferAllocateInfo::default()
+            .command_pool(transfer_pool)
+            .level(vk::CommandBufferLevel::PRIMARY)
+            .command_buffer_count(1);
+        let transfer_cmd = unsafe { device.allocate_command_buffers(&cmd_info) }
+            .expect("failed to alloc transfer cmd")[0];
+
+        log::info!(
+            "Chunk buffers: {} (vertex={} MB, index={} MB, staging={} KB)",
+            if use_staging {
+                "DEVICE_LOCAL + staging"
+            } else {
+                "HOST_VISIBLE"
+            },
+            vertex_size / (1024 * 1024),
+            index_size / (1024 * 1024),
+            staging_size / 1024,
         );
 
         let mut free_buckets = VecDeque::with_capacity(total_buckets as usize);
@@ -290,6 +355,12 @@ impl ChunkBufferStore {
             vertex_alloc,
             index_buffer,
             index_alloc,
+            staging_buffer,
+            staging_alloc,
+            staging_size,
+            transfer_pool,
+            transfer_cmd,
+            use_staging,
             free_buckets,
             chunks: HashMap::new(),
             cached_meta: Vec::new(),
@@ -310,7 +381,7 @@ impl ChunkBufferStore {
         }
     }
 
-    pub fn upload(&mut self, mesh: &ChunkMeshData) {
+    pub fn upload(&mut self, device: &ash::Device, queue: vk::Queue, mesh: &ChunkMeshData) {
         if mesh.vertices.is_empty() || mesh.indices.is_empty() {
             self.remove(&mesh.pos);
             return;
@@ -344,23 +415,41 @@ impl ChunkBufferStore {
 
         let mut bucket_ids = Vec::with_capacity(num_buckets as usize);
         let mut index_counts = Vec::with_capacity(num_buckets as usize);
+        let mut copy_regions_v: Vec<vk::BufferCopy> = Vec::new();
+        let mut copy_regions_i: Vec<vk::BufferCopy> = Vec::new();
 
-        let vb_ptr = self.vertex_alloc.mapped_slice_mut().unwrap();
-        let ib_ptr = self.index_alloc.mapped_slice_mut().unwrap();
+        let write_buf = if self.use_staging {
+            self.staging_alloc.mapped_slice_mut().unwrap()
+        } else {
+            self.vertex_alloc.mapped_slice_mut().unwrap()
+        };
+        let staging_half = self.staging_size as usize / 2;
 
         let verts = &mesh.vertices;
         let indices = &mesh.indices;
         let mut vert_cursor = 0usize;
         let mut idx_cursor = 0usize;
+        let mut stg_v_cursor = 0usize;
+        let mut stg_i_cursor = 0usize;
 
         for _ in 0..num_buckets {
             let bucket = self.free_buckets.pop_front().unwrap();
             let vert_end = (vert_cursor + BUCKET_VERTICES as usize).min(verts.len());
-            let _vert_count = vert_end - vert_cursor;
 
             let vb_offset = bucket as usize * BUCKET_VERTICES as usize * VERTEX_SIZE as usize;
             let src = bytemuck::cast_slice(&verts[vert_cursor..vert_end]);
-            vb_ptr[vb_offset..vb_offset + src.len()].copy_from_slice(src);
+
+            if self.use_staging {
+                write_buf[stg_v_cursor..stg_v_cursor + src.len()].copy_from_slice(src);
+                copy_regions_v.push(vk::BufferCopy {
+                    src_offset: stg_v_cursor as u64,
+                    dst_offset: vb_offset as u64,
+                    size: src.len() as u64,
+                });
+                stg_v_cursor += src.len();
+            } else {
+                write_buf[vb_offset..vb_offset + src.len()].copy_from_slice(src);
+            }
 
             let local_base = vert_cursor as u32;
             let local_end = vert_end as u32;
@@ -383,7 +472,20 @@ impl ChunkBufferStore {
 
             let ib_offset = bucket as usize * BUCKET_INDICES as usize * INDEX_SIZE as usize;
             let idx_bytes = bytemuck::cast_slice(&bucket_indices);
-            ib_ptr[ib_offset..ib_offset + idx_bytes.len()].copy_from_slice(idx_bytes);
+
+            if self.use_staging {
+                let stg_off = staging_half + stg_i_cursor;
+                write_buf[stg_off..stg_off + idx_bytes.len()].copy_from_slice(idx_bytes);
+                copy_regions_i.push(vk::BufferCopy {
+                    src_offset: stg_off as u64,
+                    dst_offset: ib_offset as u64,
+                    size: idx_bytes.len() as u64,
+                });
+                stg_i_cursor += idx_bytes.len();
+            } else {
+                let ib_ptr = self.index_alloc.mapped_slice_mut().unwrap();
+                ib_ptr[ib_offset..ib_offset + idx_bytes.len()].copy_from_slice(idx_bytes);
+            }
 
             index_counts.push(bucket_indices.len() as u32);
             bucket_ids.push(bucket);
@@ -401,8 +503,53 @@ impl ChunkBufferStore {
             let existing_count = *index_counts.last().unwrap() as usize;
             let idx_bytes = bytemuck::cast_slice(&remaining);
             let start = ib_offset + existing_count * INDEX_SIZE as usize;
-            ib_ptr[start..start + idx_bytes.len()].copy_from_slice(idx_bytes);
+
+            if self.use_staging {
+                let stg_off = staging_half + stg_i_cursor;
+                write_buf[stg_off..stg_off + idx_bytes.len()].copy_from_slice(idx_bytes);
+                copy_regions_i.push(vk::BufferCopy {
+                    src_offset: stg_off as u64,
+                    dst_offset: start as u64,
+                    size: idx_bytes.len() as u64,
+                });
+            } else {
+                let ib_ptr = self.index_alloc.mapped_slice_mut().unwrap();
+                ib_ptr[start..start + idx_bytes.len()].copy_from_slice(idx_bytes);
+            }
             *index_counts.last_mut().unwrap() += remaining.len() as u32;
+        }
+
+        if self.use_staging && (!copy_regions_v.is_empty() || !copy_regions_i.is_empty()) {
+            unsafe {
+                let begin = vk::CommandBufferBeginInfo::default()
+                    .flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT);
+                device
+                    .begin_command_buffer(self.transfer_cmd, &begin)
+                    .unwrap();
+                if !copy_regions_v.is_empty() {
+                    device.cmd_copy_buffer(
+                        self.transfer_cmd,
+                        self.staging_buffer,
+                        self.vertex_buffer,
+                        &copy_regions_v,
+                    );
+                }
+                if !copy_regions_i.is_empty() {
+                    device.cmd_copy_buffer(
+                        self.transfer_cmd,
+                        self.staging_buffer,
+                        self.index_buffer,
+                        &copy_regions_i,
+                    );
+                }
+                device.end_command_buffer(self.transfer_cmd).unwrap();
+                let cmds = [self.transfer_cmd];
+                let submit = [vk::SubmitInfo::default().command_buffers(&cmds)];
+                device
+                    .queue_submit(queue, &submit, vk::Fence::null())
+                    .unwrap();
+                device.queue_wait_idle(queue).unwrap();
+            }
         }
 
         self.chunks.insert(
@@ -593,9 +740,16 @@ impl ChunkBufferStore {
                 }))
                 .ok();
         }
+        unsafe { device.destroy_buffer(self.staging_buffer, None) };
+        alloc
+            .free(std::mem::replace(&mut self.staging_alloc, unsafe {
+                std::mem::zeroed()
+            }))
+            .ok();
         drop(alloc);
 
         unsafe {
+            device.destroy_command_pool(self.transfer_pool, None);
             device.destroy_pipeline(self.compute_pipeline, None);
             device.destroy_pipeline_layout(self.compute_layout, None);
             device.destroy_descriptor_pool(self.compute_pool, None);
