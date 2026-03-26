@@ -1158,11 +1158,7 @@ fn emit_face(
 }
 
 fn shade_brightness(state: azalea_block::BlockState) -> f32 {
-    if state.is_air() {
-        1.0
-    } else {
-        0.2
-    }
+    if state.is_air() { 1.0 } else { 0.2 }
 }
 
 fn vertex_ao(side1: f32, side2: f32, corner: f32) -> f32 {
