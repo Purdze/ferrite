@@ -110,7 +110,9 @@ fn apply_grass_modifier(modifier: GrassColorModifier, base: [f32; 3], x: i32, z:
             [r.min(255) as f32 / 255.0, g.min(255) as f32 / 255.0, b.min(255) as f32 / 255.0]
         }
         GrassColorModifier::Swamp => {
-            let noise = simple_hash_noise(x as f64 * 0.0225, z as f64 * 0.0225);
+            use std::sync::LazyLock;
+            static BIOME_NOISE: LazyLock<SimplexNoise> = LazyLock::new(SimplexNoise::new_biome_info);
+            let noise = BIOME_NOISE.value_2d(x as f64 * 0.0225, z as f64 * 0.0225);
             if noise < -0.1 {
                 [0x4C as f32 / 255.0, 0x76 as f32 / 255.0, 0x3C as f32 / 255.0]
             } else {
@@ -124,11 +126,116 @@ fn to_u8(f: f32) -> u8 {
     (f * 255.0).round() as u8
 }
 
-fn simple_hash_noise(x: f64, z: f64) -> f64 {
-    let ix = (x * 1000.0) as i64;
-    let iz = (z * 1000.0) as i64;
-    let h = ix.wrapping_mul(6364136223846793005).wrapping_add(iz.wrapping_mul(1442695040888963407));
-    (h as f64) / (i64::MAX as f64)
+struct SimplexNoise {
+    perm: [u8; 256],
+    #[allow(dead_code)]
+    xo: f64,
+    #[allow(dead_code)]
+    yo: f64,
+}
+
+const GRADIENT: [[i32; 3]; 16] = [
+    [1,1,0],[-1,1,0],[1,-1,0],[-1,-1,0],
+    [1,0,1],[-1,0,1],[1,0,-1],[-1,0,-1],
+    [0,1,1],[0,-1,1],[0,1,-1],[0,-1,-1],
+    [1,1,0],[0,-1,1],[-1,1,0],[0,-1,-1],
+];
+
+impl SimplexNoise {
+    fn new_biome_info() -> Self {
+        let mut rng = JavaRng::new(2345);
+        let xo = rng.next_double() * 256.0;
+        let yo = rng.next_double() * 256.0;
+        let _zo = rng.next_double() * 256.0;
+        let mut perm = [0u8; 256];
+        for (i, p) in perm.iter_mut().enumerate() {
+            *p = i as u8;
+        }
+        for i in 0..256 {
+            let j = rng.next_int((256 - i) as i32) as usize + i;
+            perm.swap(i, j);
+        }
+        Self { perm, xo, yo }
+    }
+
+    fn p(&self, i: i32) -> i32 {
+        self.perm[(i & 0xFF) as usize] as i32
+    }
+
+    fn value_2d(&self, x: f64, y: f64) -> f64 {
+        let sqrt3: f64 = 3.0_f64.sqrt();
+        let f2 = 0.5 * (sqrt3 - 1.0);
+        let g2 = (3.0 - sqrt3) / 6.0;
+
+        let s = (x + y) * f2;
+        let i = (x + s).floor() as i32;
+        let j = (y + s).floor() as i32;
+        let t = (i + j) as f64 * g2;
+        let x0 = x - (i as f64 - t);
+        let y0 = y - (j as f64 - t);
+
+        let (i1, j1) = if x0 > y0 { (1, 0) } else { (0, 1) };
+
+        let x1 = x0 - i1 as f64 + g2;
+        let y1 = y0 - j1 as f64 + g2;
+        let x2 = x0 - 1.0 + 2.0 * g2;
+        let y2 = y0 - 1.0 + 2.0 * g2;
+
+        let gi0 = (self.p(i + self.p(j)) % 12) as usize;
+        let gi1 = (self.p(i + i1 + self.p(j + j1)) % 12) as usize;
+        let gi2 = (self.p(i + 1 + self.p(j + 1)) % 12) as usize;
+
+        let n0 = corner_noise(gi0, x0, y0, 0.0, 0.5);
+        let n1 = corner_noise(gi1, x1, y1, 0.0, 0.5);
+        let n2 = corner_noise(gi2, x2, y2, 0.0, 0.5);
+
+        70.0 * (n0 + n1 + n2)
+    }
+}
+
+fn corner_noise(gi: usize, x: f64, y: f64, z: f64, falloff: f64) -> f64 {
+    let t = falloff - x * x - y * y - z * z;
+    if t < 0.0 {
+        0.0
+    } else {
+        let t2 = t * t;
+        let g = &GRADIENT[gi];
+        t2 * t2 * (g[0] as f64 * x + g[1] as f64 * y + g[2] as f64 * z)
+    }
+}
+
+struct JavaRng {
+    seed: i64,
+}
+
+impl JavaRng {
+    fn new(seed: i64) -> Self {
+        Self { seed: (seed ^ 0x5DEECE66D) & ((1i64 << 48) - 1) }
+    }
+
+    fn next(&mut self, bits: u32) -> i32 {
+        self.seed = (self.seed.wrapping_mul(0x5DEECE66D).wrapping_add(0xB)) & ((1i64 << 48) - 1);
+        (self.seed >> (48 - bits)) as i32
+    }
+
+    fn next_int(&mut self, bound: i32) -> i32 {
+        if bound & (bound - 1) == 0 {
+            return ((bound as i64 * self.next(31) as i64) >> 31) as i32;
+        }
+        loop {
+            let bits = self.next(31);
+            let val = bits % bound;
+            if bits - val + (bound - 1) >= 0 {
+                return val;
+            }
+        }
+    }
+
+    fn next_double(&mut self) -> f64 {
+        let hi = self.next(26) as i64;
+        let lo = self.next(27) as i64;
+        ((hi << 27) + lo) as f64 / ((1i64 << 53) as f64)
+    }
 }
 
 pub fn int_to_rgb(color: i32) -> [f32; 3] {
