@@ -182,21 +182,6 @@ impl ChunkStore {
         chunk.set_block_state(&block_pos, state, self.chunk_storage.min_y());
     }
 
-    pub fn get_biome(&self, x: i32, y: i32, z: i32) -> azalea_registry::data::Biome {
-        let chunk_pos = ChunkPos::new(x.div_euclid(16), z.div_euclid(16));
-        let Some(chunk_lock) = self.get_chunk(&chunk_pos) else {
-            return azalea_registry::data::Biome::default();
-        };
-        let chunk = chunk_lock.read();
-        let biome_pos = azalea_core::position::ChunkBiomePos {
-            x: (x.rem_euclid(16) / 4) as u8,
-            y,
-            z: (z.rem_euclid(16) / 4) as u8,
-        };
-        chunk
-            .get_biome(biome_pos, self.chunk_storage.min_y())
-            .unwrap_or_default()
-    }
 
     pub fn get_block_state(&self, x: i32, y: i32, z: i32) -> BlockState {
         let chunk_pos = ChunkPos::new(x.div_euclid(16), z.div_euclid(16));

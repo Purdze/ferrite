@@ -3,8 +3,8 @@ use std::sync::Arc;
 
 use azalea_block::BlockState;
 use azalea_core::position::ChunkPos;
-use binary_greedy_meshing as bgm;
 
+use super::greedy;
 use crate::renderer::chunk::atlas::{AtlasRegion, AtlasUVMap};
 use crate::world::block::model::{BakedModel, Direction};
 use crate::world::block::registry::{BlockRegistry, FaceTextures, Tint};
@@ -76,8 +76,7 @@ impl Colormap {
         asset_index: &Option<crate::assets::AssetIndex>,
         colormap_path: &str,
     ) -> Self {
-        let path =
-            crate::assets::resolve_asset_path(assets_dir, asset_index, colormap_path);
+        let path = crate::assets::resolve_asset_path(assets_dir, asset_index, colormap_path);
         let pixels = crate::renderer::util::load_png(&path)
             .map(|(data, _w, _h)| {
                 data.chunks(4)
@@ -107,16 +106,29 @@ fn apply_grass_modifier(modifier: GrassColorModifier, base: [f32; 3], x: i32, z:
             let r = ((to_u8(base[0]) & 0xFE) as u32 + 0x28) >> 1;
             let g = ((to_u8(base[1]) & 0xFE) as u32 + 0x34) >> 1;
             let b = ((to_u8(base[2]) & 0xFE) as u32 + 0x0A) >> 1;
-            [r.min(255) as f32 / 255.0, g.min(255) as f32 / 255.0, b.min(255) as f32 / 255.0]
+            [
+                r.min(255) as f32 / 255.0,
+                g.min(255) as f32 / 255.0,
+                b.min(255) as f32 / 255.0,
+            ]
         }
         GrassColorModifier::Swamp => {
             use std::sync::LazyLock;
-            static BIOME_NOISE: LazyLock<SimplexNoise> = LazyLock::new(SimplexNoise::new_biome_info);
+            static BIOME_NOISE: LazyLock<SimplexNoise> =
+                LazyLock::new(SimplexNoise::new_biome_info);
             let noise = BIOME_NOISE.value_2d(x as f64 * 0.0225, z as f64 * 0.0225);
             if noise < -0.1 {
-                [0x4C as f32 / 255.0, 0x76 as f32 / 255.0, 0x3C as f32 / 255.0]
+                [
+                    0x4C as f32 / 255.0,
+                    0x76 as f32 / 255.0,
+                    0x3C as f32 / 255.0,
+                ]
             } else {
-                [0x6A as f32 / 255.0, 0x70 as f32 / 255.0, 0x39 as f32 / 255.0]
+                [
+                    0x6A as f32 / 255.0,
+                    0x70 as f32 / 255.0,
+                    0x39 as f32 / 255.0,
+                ]
             }
         }
     }
@@ -135,10 +147,22 @@ struct SimplexNoise {
 }
 
 const GRADIENT: [[i32; 3]; 16] = [
-    [1,1,0],[-1,1,0],[1,-1,0],[-1,-1,0],
-    [1,0,1],[-1,0,1],[1,0,-1],[-1,0,-1],
-    [0,1,1],[0,-1,1],[0,1,-1],[0,-1,-1],
-    [1,1,0],[0,-1,1],[-1,1,0],[0,-1,-1],
+    [1, 1, 0],
+    [-1, 1, 0],
+    [1, -1, 0],
+    [-1, -1, 0],
+    [1, 0, 1],
+    [-1, 0, 1],
+    [1, 0, -1],
+    [-1, 0, -1],
+    [0, 1, 1],
+    [0, -1, 1],
+    [0, 1, -1],
+    [0, -1, -1],
+    [1, 1, 0],
+    [0, -1, 1],
+    [-1, 1, 0],
+    [0, -1, -1],
 ];
 
 impl SimplexNoise {
@@ -210,7 +234,9 @@ struct JavaRng {
 
 impl JavaRng {
     fn new(seed: i64) -> Self {
-        Self { seed: (seed ^ 0x5DEECE66D) & ((1i64 << 48) - 1) }
+        Self {
+            seed: (seed ^ 0x5DEECE66D) & ((1i64 << 48) - 1),
+        }
     }
 
     fn next(&mut self, bits: u32) -> i32 {
@@ -279,7 +305,7 @@ impl MeshDispatcher {
         self.biome_climate = climate;
     }
 
-    pub fn enqueue(&self, chunk_store: &ChunkStore, pos: ChunkPos, lod: u32) {
+    pub fn enqueue(&self, chunk_store: &ChunkStore, pos: ChunkPos, _lod: u32) {
         let registry = Arc::clone(&self.registry);
         let uv_map = Arc::clone(&self.uv_map);
         let grass_colormap = Arc::clone(&self.grass_colormap);
@@ -400,17 +426,19 @@ impl ChunkStoreSnapshot {
 
     fn grass_color_at(&self, x: i32, y: i32, z: i32) -> [f32; 3] {
         let climate = self.climate_at(x, y, z);
-        let base = climate
-            .grass_color_override
-            .unwrap_or_else(|| self.grass_colormap.lookup(climate.temperature, climate.downfall));
+        let base = climate.grass_color_override.unwrap_or_else(|| {
+            self.grass_colormap
+                .lookup(climate.temperature, climate.downfall)
+        });
         apply_grass_modifier(climate.grass_color_modifier, base, x, z)
     }
 
     fn foliage_color_at(&self, x: i32, y: i32, z: i32) -> [f32; 3] {
         let climate = self.climate_at(x, y, z);
-        climate
-            .foliage_color_override
-            .unwrap_or_else(|| self.foliage_colormap.lookup(climate.temperature, climate.downfall))
+        climate.foliage_color_override.unwrap_or_else(|| {
+            self.foliage_colormap
+                .lookup(climate.temperature, climate.downfall)
+        })
     }
 
     fn grass_tint(&self, x: i32, y: i32, z: i32) -> [f32; 3] {
@@ -421,7 +449,13 @@ impl ChunkStoreSnapshot {
         self.blend_color(x, y, z, Self::foliage_color_at)
     }
 
-    fn blend_color(&self, x: i32, y: i32, z: i32, color_fn: fn(&Self, i32, i32, i32) -> [f32; 3]) -> [f32; 3] {
+    fn blend_color(
+        &self,
+        x: i32,
+        y: i32,
+        z: i32,
+        color_fn: fn(&Self, i32, i32, i32) -> [f32; 3],
+    ) -> [f32; 3] {
         const RADIUS: i32 = 2;
         const COUNT: f32 = ((RADIUS * 2 + 1) * (RADIUS * 2 + 1)) as f32;
         let mut r = 0.0f32;
@@ -444,7 +478,9 @@ impl ChunkStoreSnapshot {
         let lx = x.rem_euclid(16);
         let lz = z.rem_euclid(16);
         let level = if let Some(light) = self.light.get(&(cx, cz)) {
-            light.get_sky_light(lx, y, lz).max(light.get_block_light(lx, y, lz))
+            light
+                .get_sky_light(lx, y, lz)
+                .max(light.get_block_light(lx, y, lz))
         } else {
             15
         };
@@ -534,65 +570,59 @@ impl BlockTypeMap {
 
 const SECTION_SIZE: usize = 16;
 
-fn greedy_face_light(face: bgm::Face) -> f32 {
+fn face_texture_name(textures: &FaceTextures, face: greedy::Face) -> &str {
     match face {
-        bgm::Face::Up => 1.0,
-        bgm::Face::Down => 0.5,
-        bgm::Face::Front | bgm::Face::Back => 0.8,
-        bgm::Face::Right | bgm::Face::Left => 0.6,
+        greedy::Face::Up => &textures.top,
+        greedy::Face::Down => &textures.bottom,
+        greedy::Face::Right => &textures.east,
+        greedy::Face::Left => &textures.west,
+        greedy::Face::Front => &textures.south,
+        greedy::Face::Back => &textures.north,
     }
 }
 
-fn face_texture_name(textures: &FaceTextures, face: bgm::Face) -> &str {
-    match face {
-        bgm::Face::Up => &textures.top,
-        bgm::Face::Down => &textures.bottom,
-        bgm::Face::Right => &textures.east,
-        bgm::Face::Left => &textures.west,
-        bgm::Face::Front => &textures.south,
-        bgm::Face::Back => &textures.north,
-    }
-}
+const AO_BRIGHTNESS: [f32; 4] = [0.2, 0.467, 0.733, 1.0];
 
 #[allow(clippy::too_many_arguments)]
 fn greedy_mesh_section(
     vertices: &mut Vec<ChunkVertex>,
     indices: &mut Vec<u32>,
     snapshot: &ChunkStoreSnapshot,
+    registry: &BlockRegistry,
     type_map: &BlockTypeMap,
     uv_map: &AtlasUVMap,
     world_x: i32,
     section_y: i32,
     world_z: i32,
 ) {
-    let mut mesher = bgm::Mesher::<SECTION_SIZE>::new();
-    let mut voxels = [0u16; bgm::Mesher::<SECTION_SIZE>::CS_P3];
+    type M = greedy::GreedyMesher<SECTION_SIZE>;
+    let mut mesher = M::new();
+    let mut voxels = vec![0u16; M::CS_P3];
+    let mut occluders = vec![false; M::CS_P3];
 
-    for lz in 0..18 {
+    for ly in 0..18 {
         for lx in 0..18 {
-            for ly in 0..18 {
+            for lz in 0..18 {
                 let bx = world_x + lx as i32 - 1;
                 let by = section_y + ly as i32 - 1;
                 let bz = world_z + lz as i32 - 1;
                 let state = snapshot.get_block_state(bx, by, bz);
-                let id = type_map.get_id(state);
-                let cs_p = SECTION_SIZE + 2;
-                let idx = (ly * cs_p + lx) * cs_p + lz;
-                voxels[idx] = id;
+                let idx = greedy::pad_linearize::<SECTION_SIZE>(lx, ly, lz);
+                voxels[idx] = type_map.get_id(state);
+                occluders[idx] = registry.is_opaque_full_cube(state);
             }
         }
     }
 
     let transparent_set = std::collections::BTreeSet::new();
-    mesher.mesh(&voxels, &transparent_set);
+    mesher.mesh(&voxels, &occluders, &transparent_set);
 
-    for face_idx in 0..6u8 {
-        let face = bgm::Face::from(face_idx);
-        let light = greedy_face_light(face);
+    for face_idx in 0..6usize {
+        let face = greedy::Face::from(face_idx);
+        let dir_shade = face.shade_light();
 
-        for quad in &mesher.quads[face_idx as usize] {
-            let block_id = quad.voxel_id() as u16;
-
+        for quad in &mesher.quads[face_idx] {
+            let block_id = quad.voxel_id();
             let info = match type_map.get_info(block_id) {
                 Some(i) => i,
                 None => continue,
@@ -600,34 +630,45 @@ fn greedy_mesh_section(
 
             let tex_name = face_texture_name(&info.textures, face);
             let region = uv_map.get_region(tex_name);
+            let verts_uvs = face.vertices(quad);
+
+            let [x0, _, z0] = verts_uvs[0].0;
+            let block_x = x0 as i32 + world_x;
+            let block_z = z0 as i32 + world_z;
             let tint = tint_color(
                 info.textures.tint,
-                snapshot.grass_tint(world_x, section_y, world_z),
-                snapshot.foliage_tint(world_x, section_y, world_z),
+                snapshot.grass_tint(block_x, section_y, block_z),
+                snapshot.foliage_tint(block_x, section_y, block_z),
             );
 
-            let packed_verts = face.vertices_packed(*quad);
-            let base = vertices.len() as u32;
+            let ao = quad.ao_levels();
+            let lights: [f32; 4] = core::array::from_fn(|i| AO_BRIGHTNESS[ao[i] as usize] * dir_shade);
 
+            let base = vertices.len() as u32;
             let u_span = region.u_max - region.u_min;
             let v_span = region.v_max - region.v_min;
 
-            for pv in &packed_verts {
-                let x = pv.x() as f32 + world_x as f32;
-                let y = pv.y() as f32 + section_y as f32;
-                let z = pv.z() as f32 + world_z as f32;
-                let u = region.u_min + pv.u() as f32 * u_span;
-                let v = region.v_min + pv.v() as f32 * v_span;
-
+            for (i, (pos, uv)) in verts_uvs.iter().enumerate() {
                 vertices.push(ChunkVertex {
-                    position: [x, y, z],
-                    tex_coords: [u, v],
-                    light,
+                    position: [
+                        pos[0] + world_x as f32,
+                        pos[1] + section_y as f32,
+                        pos[2] + world_z as f32,
+                    ],
+                    tex_coords: [
+                        region.u_min + uv[0] * u_span,
+                        region.v_min + uv[1] * v_span,
+                    ],
+                    light: lights[i],
                     tint,
                 });
             }
 
-            indices.extend_from_slice(&[base, base + 1, base + 2, base + 1, base + 3, base + 2]);
+            if lights[0] + lights[2] > lights[1] + lights[3] {
+                indices.extend_from_slice(&[base + 1, base + 2, base + 3, base + 3, base, base + 1]);
+            } else {
+                indices.extend_from_slice(&[base, base + 1, base + 2, base + 2, base + 3, base]);
+            }
         }
     }
 }
@@ -651,7 +692,11 @@ fn mesh_chunk_snapshot(
     let world_x = pos.x * 16;
     let world_z = pos.z * 16;
 
-    let type_map: Option<BlockTypeMap> = None;
+    let type_map = if lod == 0 {
+        Some(BlockTypeMap::build(snapshot, registry, world_x, world_z, min_y, max_y))
+    } else {
+        None
+    };
     if let Some(ref tm) = type_map {
         let sections = (max_y - min_y) / 16;
         for section in 0..sections {
@@ -660,6 +705,7 @@ fn mesh_chunk_snapshot(
                 &mut vertices,
                 &mut indices,
                 snapshot,
+                registry,
                 tm,
                 uv_map,
                 world_x,
@@ -822,7 +868,11 @@ fn emit_baked_model(
         }
 
         let region = uv_map.get_region(&quad.texture);
-        let tint = tint_color(quad.tint, snapshot.grass_tint(bx, by, bz), snapshot.foliage_tint(bx, by, bz));
+        let tint = tint_color(
+            quad.tint,
+            snapshot.grass_tint(bx, by, bz),
+            snapshot.foliage_tint(bx, by, bz),
+        );
         let lights = if let Some(dir) = quad.cullface {
             compute_face_ao(snapshot, registry, bx, by, bz, dir)
         } else {
@@ -854,7 +904,11 @@ fn emit_cube_faces(
     by: i32,
     bz: i32,
 ) {
-    let tint = tint_color(textures.tint, snapshot.grass_tint(bx, by, bz), snapshot.foliage_tint(bx, by, bz));
+    let tint = tint_color(
+        textures.tint,
+        snapshot.grass_tint(bx, by, bz),
+        snapshot.foliage_tint(bx, by, bz),
+    );
 
     for (i, dir) in CUBE_FACE_DIRS.iter().enumerate() {
         let offset = dir.offset();
@@ -1004,7 +1058,11 @@ fn emit_multipart(
         }
 
         let region = uv_map.get_region(&quad.texture);
-        let tint = tint_color(quad.tint, snapshot.grass_tint(bx, by, bz), snapshot.foliage_tint(bx, by, bz));
+        let tint = tint_color(
+            quad.tint,
+            snapshot.grass_tint(bx, by, bz),
+            snapshot.foliage_tint(bx, by, bz),
+        );
         emit_face(
             vertices,
             indices,
@@ -1158,7 +1216,11 @@ fn emit_face(
 }
 
 fn shade_brightness(state: azalea_block::BlockState, registry: &BlockRegistry) -> f32 {
-    if registry.is_opaque_full_cube(state) { 0.2 } else { 1.0 }
+    if registry.is_opaque_full_cube(state) {
+        0.2
+    } else {
+        1.0
+    }
 }
 
 fn vertex_ao(side1: f32, side2: f32, corner: f32) -> f32 {
@@ -1174,11 +1236,12 @@ fn compute_face_ao(
     dir: Direction,
 ) -> [f32; 4] {
     let s = |dx: i32, dy: i32, dz: i32| -> f32 {
-        shade_brightness(snapshot.get_block_state(bx + dx, by + dy, bz + dz), registry)
+        shade_brightness(
+            snapshot.get_block_state(bx + dx, by + dy, bz + dz),
+            registry,
+        )
     };
-    let l = |dx: i32, dy: i32, dz: i32| -> f32 {
-        snapshot.get_light(bx + dx, by + dy, bz + dz)
-    };
+    let l = |dx: i32, dy: i32, dz: i32| -> f32 { snapshot.get_light(bx + dx, by + dy, bz + dz) };
     let dir_shade = match dir {
         Direction::Up => 1.0,
         Direction::Down => 0.5,
@@ -1197,10 +1260,10 @@ fn compute_face_ao(
                     vertex_ao(s(0, 1, -1), s(-1, 1, 0), s(-1, 1, -1)),
                 ],
                 [
-                    avg4(l(n[0],n[1],n[2]), l(0,1,1), l(-1,1,0), l(-1,1,1)),
-                    avg4(l(n[0],n[1],n[2]), l(0,1,1), l(1,1,0), l(1,1,1)),
-                    avg4(l(n[0],n[1],n[2]), l(0,1,-1), l(1,1,0), l(1,1,-1)),
-                    avg4(l(n[0],n[1],n[2]), l(0,1,-1), l(-1,1,0), l(-1,1,-1)),
+                    avg4(l(n[0], n[1], n[2]), l(0, 1, 1), l(-1, 1, 0), l(-1, 1, 1)),
+                    avg4(l(n[0], n[1], n[2]), l(0, 1, 1), l(1, 1, 0), l(1, 1, 1)),
+                    avg4(l(n[0], n[1], n[2]), l(0, 1, -1), l(1, 1, 0), l(1, 1, -1)),
+                    avg4(l(n[0], n[1], n[2]), l(0, 1, -1), l(-1, 1, 0), l(-1, 1, -1)),
                 ],
             )
         }
@@ -1208,16 +1271,21 @@ fn compute_face_ao(
             let n = [0, -1, 0];
             (
                 [
-                    vertex_ao(s(0,-1,-1), s(-1,-1,0), s(-1,-1,-1)),
-                    vertex_ao(s(0,-1,-1), s(1,-1,0), s(1,-1,-1)),
-                    vertex_ao(s(0,-1,1), s(1,-1,0), s(1,-1,1)),
-                    vertex_ao(s(0,-1,1), s(-1,-1,0), s(-1,-1,1)),
+                    vertex_ao(s(0, -1, -1), s(-1, -1, 0), s(-1, -1, -1)),
+                    vertex_ao(s(0, -1, -1), s(1, -1, 0), s(1, -1, -1)),
+                    vertex_ao(s(0, -1, 1), s(1, -1, 0), s(1, -1, 1)),
+                    vertex_ao(s(0, -1, 1), s(-1, -1, 0), s(-1, -1, 1)),
                 ],
                 [
-                    avg4(l(n[0],n[1],n[2]), l(0,-1,-1), l(-1,-1,0), l(-1,-1,-1)),
-                    avg4(l(n[0],n[1],n[2]), l(0,-1,-1), l(1,-1,0), l(1,-1,-1)),
-                    avg4(l(n[0],n[1],n[2]), l(0,-1,1), l(1,-1,0), l(1,-1,1)),
-                    avg4(l(n[0],n[1],n[2]), l(0,-1,1), l(-1,-1,0), l(-1,-1,1)),
+                    avg4(
+                        l(n[0], n[1], n[2]),
+                        l(0, -1, -1),
+                        l(-1, -1, 0),
+                        l(-1, -1, -1),
+                    ),
+                    avg4(l(n[0], n[1], n[2]), l(0, -1, -1), l(1, -1, 0), l(1, -1, -1)),
+                    avg4(l(n[0], n[1], n[2]), l(0, -1, 1), l(1, -1, 0), l(1, -1, 1)),
+                    avg4(l(n[0], n[1], n[2]), l(0, -1, 1), l(-1, -1, 0), l(-1, -1, 1)),
                 ],
             )
         }
@@ -1225,16 +1293,21 @@ fn compute_face_ao(
             let n = [0, 0, -1];
             (
                 [
-                    vertex_ao(s(-1,0,-1), s(0,-1,-1), s(-1,-1,-1)),
-                    vertex_ao(s(-1,0,-1), s(0,1,-1), s(-1,1,-1)),
-                    vertex_ao(s(1,0,-1), s(0,1,-1), s(1,1,-1)),
-                    vertex_ao(s(1,0,-1), s(0,-1,-1), s(1,-1,-1)),
+                    vertex_ao(s(-1, 0, -1), s(0, -1, -1), s(-1, -1, -1)),
+                    vertex_ao(s(-1, 0, -1), s(0, 1, -1), s(-1, 1, -1)),
+                    vertex_ao(s(1, 0, -1), s(0, 1, -1), s(1, 1, -1)),
+                    vertex_ao(s(1, 0, -1), s(0, -1, -1), s(1, -1, -1)),
                 ],
                 [
-                    avg4(l(n[0],n[1],n[2]), l(-1,0,-1), l(0,-1,-1), l(-1,-1,-1)),
-                    avg4(l(n[0],n[1],n[2]), l(-1,0,-1), l(0,1,-1), l(-1,1,-1)),
-                    avg4(l(n[0],n[1],n[2]), l(1,0,-1), l(0,1,-1), l(1,1,-1)),
-                    avg4(l(n[0],n[1],n[2]), l(1,0,-1), l(0,-1,-1), l(1,-1,-1)),
+                    avg4(
+                        l(n[0], n[1], n[2]),
+                        l(-1, 0, -1),
+                        l(0, -1, -1),
+                        l(-1, -1, -1),
+                    ),
+                    avg4(l(n[0], n[1], n[2]), l(-1, 0, -1), l(0, 1, -1), l(-1, 1, -1)),
+                    avg4(l(n[0], n[1], n[2]), l(1, 0, -1), l(0, 1, -1), l(1, 1, -1)),
+                    avg4(l(n[0], n[1], n[2]), l(1, 0, -1), l(0, -1, -1), l(1, -1, -1)),
                 ],
             )
         }
@@ -1242,16 +1315,16 @@ fn compute_face_ao(
             let n = [0, 0, 1];
             (
                 [
-                    vertex_ao(s(1,0,1), s(0,-1,1), s(1,-1,1)),
-                    vertex_ao(s(1,0,1), s(0,1,1), s(1,1,1)),
-                    vertex_ao(s(-1,0,1), s(0,1,1), s(-1,1,1)),
-                    vertex_ao(s(-1,0,1), s(0,-1,1), s(-1,-1,1)),
+                    vertex_ao(s(1, 0, 1), s(0, -1, 1), s(1, -1, 1)),
+                    vertex_ao(s(1, 0, 1), s(0, 1, 1), s(1, 1, 1)),
+                    vertex_ao(s(-1, 0, 1), s(0, 1, 1), s(-1, 1, 1)),
+                    vertex_ao(s(-1, 0, 1), s(0, -1, 1), s(-1, -1, 1)),
                 ],
                 [
-                    avg4(l(n[0],n[1],n[2]), l(1,0,1), l(0,-1,1), l(1,-1,1)),
-                    avg4(l(n[0],n[1],n[2]), l(1,0,1), l(0,1,1), l(1,1,1)),
-                    avg4(l(n[0],n[1],n[2]), l(-1,0,1), l(0,1,1), l(-1,1,1)),
-                    avg4(l(n[0],n[1],n[2]), l(-1,0,1), l(0,-1,1), l(-1,-1,1)),
+                    avg4(l(n[0], n[1], n[2]), l(1, 0, 1), l(0, -1, 1), l(1, -1, 1)),
+                    avg4(l(n[0], n[1], n[2]), l(1, 0, 1), l(0, 1, 1), l(1, 1, 1)),
+                    avg4(l(n[0], n[1], n[2]), l(-1, 0, 1), l(0, 1, 1), l(-1, 1, 1)),
+                    avg4(l(n[0], n[1], n[2]), l(-1, 0, 1), l(0, -1, 1), l(-1, -1, 1)),
                 ],
             )
         }
@@ -1259,16 +1332,16 @@ fn compute_face_ao(
             let n = [1, 0, 0];
             (
                 [
-                    vertex_ao(s(1,0,-1), s(1,-1,0), s(1,-1,-1)),
-                    vertex_ao(s(1,0,-1), s(1,1,0), s(1,1,-1)),
-                    vertex_ao(s(1,0,1), s(1,1,0), s(1,1,1)),
-                    vertex_ao(s(1,0,1), s(1,-1,0), s(1,-1,1)),
+                    vertex_ao(s(1, 0, -1), s(1, -1, 0), s(1, -1, -1)),
+                    vertex_ao(s(1, 0, -1), s(1, 1, 0), s(1, 1, -1)),
+                    vertex_ao(s(1, 0, 1), s(1, 1, 0), s(1, 1, 1)),
+                    vertex_ao(s(1, 0, 1), s(1, -1, 0), s(1, -1, 1)),
                 ],
                 [
-                    avg4(l(n[0],n[1],n[2]), l(1,0,-1), l(1,-1,0), l(1,-1,-1)),
-                    avg4(l(n[0],n[1],n[2]), l(1,0,-1), l(1,1,0), l(1,1,-1)),
-                    avg4(l(n[0],n[1],n[2]), l(1,0,1), l(1,1,0), l(1,1,1)),
-                    avg4(l(n[0],n[1],n[2]), l(1,0,1), l(1,-1,0), l(1,-1,1)),
+                    avg4(l(n[0], n[1], n[2]), l(1, 0, -1), l(1, -1, 0), l(1, -1, -1)),
+                    avg4(l(n[0], n[1], n[2]), l(1, 0, -1), l(1, 1, 0), l(1, 1, -1)),
+                    avg4(l(n[0], n[1], n[2]), l(1, 0, 1), l(1, 1, 0), l(1, 1, 1)),
+                    avg4(l(n[0], n[1], n[2]), l(1, 0, 1), l(1, -1, 0), l(1, -1, 1)),
                 ],
             )
         }
@@ -1276,16 +1349,21 @@ fn compute_face_ao(
             let n = [-1, 0, 0];
             (
                 [
-                    vertex_ao(s(-1,0,1), s(-1,-1,0), s(-1,-1,1)),
-                    vertex_ao(s(-1,0,1), s(-1,1,0), s(-1,1,1)),
-                    vertex_ao(s(-1,0,-1), s(-1,1,0), s(-1,1,-1)),
-                    vertex_ao(s(-1,0,-1), s(-1,-1,0), s(-1,-1,-1)),
+                    vertex_ao(s(-1, 0, 1), s(-1, -1, 0), s(-1, -1, 1)),
+                    vertex_ao(s(-1, 0, 1), s(-1, 1, 0), s(-1, 1, 1)),
+                    vertex_ao(s(-1, 0, -1), s(-1, 1, 0), s(-1, 1, -1)),
+                    vertex_ao(s(-1, 0, -1), s(-1, -1, 0), s(-1, -1, -1)),
                 ],
                 [
-                    avg4(l(n[0],n[1],n[2]), l(-1,0,1), l(-1,-1,0), l(-1,-1,1)),
-                    avg4(l(n[0],n[1],n[2]), l(-1,0,1), l(-1,1,0), l(-1,1,1)),
-                    avg4(l(n[0],n[1],n[2]), l(-1,0,-1), l(-1,1,0), l(-1,1,-1)),
-                    avg4(l(n[0],n[1],n[2]), l(-1,0,-1), l(-1,-1,0), l(-1,-1,-1)),
+                    avg4(l(n[0], n[1], n[2]), l(-1, 0, 1), l(-1, -1, 0), l(-1, -1, 1)),
+                    avg4(l(n[0], n[1], n[2]), l(-1, 0, 1), l(-1, 1, 0), l(-1, 1, 1)),
+                    avg4(l(n[0], n[1], n[2]), l(-1, 0, -1), l(-1, 1, 0), l(-1, 1, -1)),
+                    avg4(
+                        l(n[0], n[1], n[2]),
+                        l(-1, 0, -1),
+                        l(-1, -1, 0),
+                        l(-1, -1, -1),
+                    ),
                 ],
             )
         }
