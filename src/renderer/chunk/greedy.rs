@@ -72,12 +72,7 @@ impl<const CS: usize> GreedyMesher<CS> {
         }
     }
 
-    pub fn mesh(
-        &mut self,
-        voxels: &[u16],
-        occluders: &[bool],
-        transparents: &BTreeSet<u16>,
-    ) {
+    pub fn mesh(&mut self, voxels: &[u16], occluders: &[bool], transparents: &BTreeSet<u16>) {
         self.face_culling(voxels, transparents);
         self.compute_ao(occluders);
         self.face_merging(voxels);
@@ -139,14 +134,17 @@ impl<const CS: usize> GreedyMesher<CS> {
                         let bit_pos = remaining.trailing_zeros() as usize;
                         remaining &= !(1u64 << bit_pos);
 
-                        let (x, y, z) = axis_to_xyz(axis as usize, forward + 1, bit_pos + 1, layer + 1);
+                        let (x, y, z) =
+                            axis_to_xyz(axis as usize, forward + 1, bit_pos + 1, layer + 1);
                         let (nx, ny, nz) = face_normal(face);
                         let fx = x as i32 + nx;
                         let fy = y as i32 + ny;
                         let fz = z as i32 + nz;
 
                         let ao = compute_vertex_ao_packed(face, fx, fy, fz, &occ);
-                        let ao_idx = (face as usize * Self::CS_2 * CS) + (layer * CS + forward) * CS + bit_pos;
+                        let ao_idx = (face as usize * Self::CS_2 * CS)
+                            + (layer * CS + forward) * CS
+                            + bit_pos;
                         self.ao_faces[ao_idx] = ao;
                     }
                 }
@@ -174,7 +172,9 @@ impl<const CS: usize> GreedyMesher<CS> {
                         let fz = z as i32 + nz;
 
                         let ao = compute_vertex_ao_packed(face, fx, fy, fz, &occ);
-                        let ao_idx = (face as usize * Self::CS_2 * CS) + (forward * CS + right) * CS + (bit_pos - 1);
+                        let ao_idx = (face as usize * Self::CS_2 * CS)
+                            + (forward * CS + right) * CS
+                            + (bit_pos - 1);
                         self.ao_faces[ao_idx] = ao;
                     }
                 }
@@ -205,11 +205,18 @@ impl<const CS: usize> GreedyMesher<CS> {
                     let mut right_merged = 1usize;
                     while bits_here != 0 {
                         let bit_pos = bits_here.trailing_zeros() as usize;
-                        let v_type = voxels[get_axis_index::<CS>(axis, forward + 1, bit_pos + 1, layer + 1)];
+                        let v_type =
+                            voxels[get_axis_index::<CS>(axis, forward + 1, bit_pos + 1, layer + 1)];
                         let ao_here = self.get_ao(face, layer, forward, bit_pos);
 
                         if (bits_next >> bit_pos & 1) != 0
-                            && v_type == voxels[get_axis_index::<CS>(axis, forward + 2, bit_pos + 1, layer + 1)]
+                            && v_type
+                                == voxels[get_axis_index::<CS>(
+                                    axis,
+                                    forward + 2,
+                                    bit_pos + 1,
+                                    layer + 1,
+                                )]
                             && ao_here == self.get_ao(face, layer, forward + 1, bit_pos)
                         {
                             self.forward_merged[bit_pos] += 1;
@@ -220,7 +227,13 @@ impl<const CS: usize> GreedyMesher<CS> {
                         for right in (bit_pos + 1)..CS {
                             if (bits_here >> right & 1) == 0
                                 || self.forward_merged[bit_pos] != self.forward_merged[right]
-                                || v_type != voxels[get_axis_index::<CS>(axis, forward + 1, right + 1, layer + 1)]
+                                || v_type
+                                    != voxels[get_axis_index::<CS>(
+                                        axis,
+                                        forward + 1,
+                                        right + 1,
+                                        layer + 1,
+                                    )]
                                 || ao_here != self.get_ao(face, layer, forward, right)
                             {
                                 break;
@@ -240,10 +253,42 @@ impl<const CS: usize> GreedyMesher<CS> {
                         right_merged = 1;
 
                         let quad = match face {
-                            0 => Quad::pack(mesh_front, mesh_up, mesh_left, mesh_length, mesh_width, v_type as usize, ao_here),
-                            1 => Quad::pack(mesh_front + mesh_length, mesh_up, mesh_left, mesh_length, mesh_width, v_type as usize, ao_here),
-                            2 => Quad::pack(mesh_up, mesh_front + mesh_length, mesh_left, mesh_length, mesh_width, v_type as usize, ao_here),
-                            3 => Quad::pack(mesh_up, mesh_front, mesh_left, mesh_length, mesh_width, v_type as usize, ao_here),
+                            0 => Quad::pack(
+                                mesh_front,
+                                mesh_up,
+                                mesh_left,
+                                mesh_length,
+                                mesh_width,
+                                v_type as usize,
+                                ao_here,
+                            ),
+                            1 => Quad::pack(
+                                mesh_front + mesh_length,
+                                mesh_up,
+                                mesh_left,
+                                mesh_length,
+                                mesh_width,
+                                v_type as usize,
+                                ao_here,
+                            ),
+                            2 => Quad::pack(
+                                mesh_up,
+                                mesh_front + mesh_length,
+                                mesh_left,
+                                mesh_length,
+                                mesh_width,
+                                v_type as usize,
+                                ao_here,
+                            ),
+                            3 => Quad::pack(
+                                mesh_up,
+                                mesh_front,
+                                mesh_left,
+                                mesh_length,
+                                mesh_width,
+                                v_type as usize,
+                                ao_here,
+                            ),
                             _ => unreachable!(),
                         };
                         self.quads[face].push(quad);
@@ -278,7 +323,8 @@ impl<const CS: usize> GreedyMesher<CS> {
                         let bit_pos = bits_here.trailing_zeros() as usize;
                         bits_here &= !(1 << bit_pos);
 
-                        let v_type = voxels[get_axis_index::<CS>(axis, right + 1, forward + 1, bit_pos)];
+                        let v_type =
+                            voxels[get_axis_index::<CS>(axis, right + 1, forward + 1, bit_pos)];
                         let ao_here = self.get_ao(face, forward, right, bit_pos - 1);
                         let forward_merge_i = right_cs + (bit_pos - 1);
 
@@ -297,7 +343,9 @@ impl<const CS: usize> GreedyMesher<CS> {
 
                         if *right_merged_ref == 0
                             && (bits_forward >> bit_pos & 1) != 0
-                            && v_type == voxels[get_axis_index::<CS>(axis, right + 1, forward + 2, bit_pos)]
+                            && v_type
+                                == voxels
+                                    [get_axis_index::<CS>(axis, right + 1, forward + 2, bit_pos)]
                             && ao_here == ao_forward
                         {
                             self.forward_merged[forward_merge_i] += 1;
@@ -305,8 +353,11 @@ impl<const CS: usize> GreedyMesher<CS> {
                         }
 
                         if (bits_right >> bit_pos & 1) != 0
-                            && self.forward_merged[forward_merge_i] == self.forward_merged[(right_cs + CS) + (bit_pos - 1)]
-                            && v_type == voxels[get_axis_index::<CS>(axis, right + 2, forward + 1, bit_pos)]
+                            && self.forward_merged[forward_merge_i]
+                                == self.forward_merged[(right_cs + CS) + (bit_pos - 1)]
+                            && v_type
+                                == voxels
+                                    [get_axis_index::<CS>(axis, right + 2, forward + 1, bit_pos)]
                             && ao_here == ao_right
                         {
                             self.forward_merged[forward_merge_i] = 0;
@@ -356,12 +407,12 @@ fn get_axis_index<const CS: usize>(axis: usize, a: usize, b: usize, c: usize) ->
 
 fn face_normal(face: u8) -> (i32, i32, i32) {
     match face {
-        0 => (0, 0, 1),   // Up (+Z in bgm's coordinate system)
-        1 => (0, 0, -1),  // Down
-        2 => (0, 1, 0),   // Right (+Y)
-        3 => (0, -1, 0),  // Left
-        4 => (1, 0, 0),   // Front (+X)
-        5 => (-1, 0, 0),  // Back
+        0 => (0, 0, 1),  // Up (+Z in bgm's coordinate system)
+        1 => (0, 0, -1), // Down
+        2 => (0, 1, 0),  // Right (+Y)
+        3 => (0, -1, 0), // Left
+        4 => (1, 0, 0),  // Front (+X)
+        5 => (-1, 0, 0), // Back
         _ => unreachable!(),
     }
 }
@@ -467,6 +518,17 @@ impl From<usize> for Face {
 }
 
 impl Face {
+    pub fn offset(&self) -> [i32; 3] {
+        match self {
+            Self::Up => [0, 1, 0],
+            Self::Down => [0, -1, 0],
+            Self::Right => [1, 0, 0],
+            Self::Left => [-1, 0, 0],
+            Self::Front => [0, 0, 1],
+            Self::Back => [0, 0, -1],
+        }
+    }
+
     pub fn shade_light(&self) -> f32 {
         match self {
             Self::Up => 1.0,
@@ -484,39 +546,39 @@ impl Face {
         match self {
             Face::Up => [
                 ([x + w, z, y + h], [w, h]),
-                ([x + w, z, y],     [w, 0.0]),
-                ([x,     z, y + h], [0.0, h]),
-                ([x,     z, y],     [0.0, 0.0]),
+                ([x + w, z, y], [w, 0.0]),
+                ([x, z, y + h], [0.0, h]),
+                ([x, z, y], [0.0, 0.0]),
             ],
             Face::Down => [
-                ([x,     z, y + h], [w, h]),
-                ([x,     z, y],     [w, 0.0]),
+                ([x, z, y + h], [w, h]),
+                ([x, z, y], [w, 0.0]),
                 ([x + w, z, y + h], [0.0, h]),
-                ([x + w, z, y],     [0.0, 0.0]),
+                ([x + w, z, y], [0.0, 0.0]),
             ],
             Face::Right => [
-                ([y,     z + h, x],     [0.0, 0.0]),
-                ([y,     z,     x],     [h, 0.0]),
-                ([y + w, z + h, x],     [0.0, w]),
-                ([y + w, z,     x],     [h, w]),
+                ([y, z + h, x], [0.0, 0.0]),
+                ([y, z, x], [h, 0.0]),
+                ([y + w, z + h, x], [0.0, w]),
+                ([y + w, z, x], [h, w]),
             ],
             Face::Left => [
-                ([y,     z,     x], [h, w]),
-                ([y,     z + h, x], [0.0, w]),
-                ([y + w, z,     x], [h, 0.0]),
+                ([y, z, x], [h, w]),
+                ([y, z + h, x], [0.0, w]),
+                ([y + w, z, x], [h, 0.0]),
                 ([y + w, z + h, x], [0.0, 0.0]),
             ],
             Face::Front => [
-                ([x,     y + h, z], [0.0, 0.0]),
-                ([x,     y,     z], [0.0, h]),
-                ([x,     y + h, z + w], [w, 0.0]),
-                ([x,     y,     z + w], [w, h]),
+                ([x, y + h, z], [0.0, 0.0]),
+                ([x, y, z], [0.0, h]),
+                ([x, y + h, z + w], [w, 0.0]),
+                ([x, y, z + w], [w, h]),
             ],
             Face::Back => [
                 ([x, y + h, z + w], [w, 0.0]),
-                ([x, y,     z + w], [w, h]),
-                ([x, y + h, z],     [0.0, 0.0]),
-                ([x, y,     z],     [0.0, h]),
+                ([x, y, z + w], [w, h]),
+                ([x, y + h, z], [0.0, 0.0]),
+                ([x, y, z], [0.0, h]),
             ],
         }
     }

@@ -182,7 +182,6 @@ impl ChunkStore {
         chunk.set_block_state(&block_pos, state, self.chunk_storage.min_y());
     }
 
-
     pub fn get_block_state(&self, x: i32, y: i32, z: i32) -> BlockState {
         let chunk_pos = ChunkPos::new(x.div_euclid(16), z.div_euclid(16));
         let Some(chunk_lock) = self.get_chunk(&chunk_pos) else {

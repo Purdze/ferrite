@@ -571,7 +571,9 @@ impl Renderer {
 
     pub fn create_mesh_dispatcher(
         &self,
-        biome_climate: std::sync::Arc<std::collections::HashMap<u32, crate::renderer::chunk::mesher::BiomeClimate>>,
+        biome_climate: std::sync::Arc<
+            std::collections::HashMap<u32, crate::renderer::chunk::mesher::BiomeClimate>,
+        >,
     ) -> MeshDispatcher {
         let grass_colormap = crate::renderer::chunk::mesher::Colormap::load(
             &self.assets_dir,

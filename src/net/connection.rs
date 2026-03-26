@@ -311,7 +311,7 @@ async fn config_sequence(
 fn extract_biome_climate(
     holder: &azalea_core::registry_holder::RegistryHolder,
 ) -> std::collections::HashMap<u32, crate::renderer::chunk::mesher::BiomeClimate> {
-    use crate::renderer::chunk::mesher::{BiomeClimate, GrassColorModifier, int_to_rgb};
+    use crate::renderer::chunk::mesher::{int_to_rgb, BiomeClimate, GrassColorModifier};
 
     let mut result = std::collections::HashMap::new();
     let biome_key: azalea_registry::identifier::Identifier = "minecraft:worldgen/biome".into();

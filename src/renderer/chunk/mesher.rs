@@ -642,7 +642,15 @@ fn greedy_mesh_section(
             );
 
             let ao = quad.ao_levels();
-            let lights: [f32; 4] = core::array::from_fn(|i| AO_BRIGHTNESS[ao[i] as usize] * dir_shade);
+            let [qx, qy, qz] = quad.xyz();
+            let face_offset = face.offset();
+            let light_sample = snapshot.get_light(
+                world_x + qx as i32 + face_offset[0],
+                section_y + qy as i32 + face_offset[1],
+                world_z + qz as i32 + face_offset[2],
+            );
+            let lights: [f32; 4] =
+                core::array::from_fn(|i| AO_BRIGHTNESS[ao[i] as usize] * light_sample * dir_shade);
 
             let base = vertices.len() as u32;
             let u_span = region.u_max - region.u_min;
@@ -655,17 +663,21 @@ fn greedy_mesh_section(
                         pos[1] + section_y as f32,
                         pos[2] + world_z as f32,
                     ],
-                    tex_coords: [
-                        region.u_min + uv[0] * u_span,
-                        region.v_min + uv[1] * v_span,
-                    ],
+                    tex_coords: [region.u_min + uv[0] * u_span, region.v_min + uv[1] * v_span],
                     light: lights[i],
                     tint,
                 });
             }
 
             if lights[0] + lights[2] > lights[1] + lights[3] {
-                indices.extend_from_slice(&[base + 1, base + 2, base + 3, base + 3, base, base + 1]);
+                indices.extend_from_slice(&[
+                    base + 1,
+                    base + 2,
+                    base + 3,
+                    base + 3,
+                    base,
+                    base + 1,
+                ]);
             } else {
                 indices.extend_from_slice(&[base, base + 1, base + 2, base + 2, base + 3, base]);
             }
@@ -693,7 +705,9 @@ fn mesh_chunk_snapshot(
     let world_z = pos.z * 16;
 
     let type_map = if lod == 0 {
-        Some(BlockTypeMap::build(snapshot, registry, world_x, world_z, min_y, max_y))
+        Some(BlockTypeMap::build(
+            snapshot, registry, world_x, world_z, min_y, max_y,
+        ))
     } else {
         None
     };

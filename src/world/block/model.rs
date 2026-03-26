@@ -576,7 +576,11 @@ fn bake_resolved_model(
             } else {
                 1.0
             };
-            let quad_tint = if face_def.tint_index.is_some() { tint } else { super::registry::Tint::None };
+            let quad_tint = if face_def.tint_index.is_some() {
+                tint
+            } else {
+                super::registry::Tint::None
+            };
 
             if rot_x != 0 || rot_y != 0 {
                 positions = rotate_positions(positions, rot_x, rot_y);
