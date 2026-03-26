@@ -486,3 +486,15 @@ pub async fn create_installation(
 
     Ok(installation)
 }
+
+#[tauri::command]
+pub async fn get_installations(
+    state: State<'_, AppState>,
+) -> Result<Vec<Installation>, InstallationError> {
+    use installations::registry;
+
+    let _guard = state.installations_lock.lock().await;
+    let installations = registry::load()?;
+
+    Ok(installations)
+}

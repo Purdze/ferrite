@@ -53,6 +53,7 @@ fn main() {
             commands::load_servers,
             commands::save_servers,
             commands::create_installation,
+            commands::get_installations,
         ])
         .run(tauri::generate_context!())
         .expect("failed to run Pomme launcher");

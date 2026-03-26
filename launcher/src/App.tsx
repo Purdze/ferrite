@@ -7,7 +7,7 @@ import Titlebar from "./components/Titlebar";
 import { ConfirmDialog } from "./components/dialogs/ConfirmDialog.tsx";
 import { InstallationDialog } from "./components/dialogs/InstallationDialog.tsx";
 import { useAppStateContext } from "./lib/state";
-import { AuthAccount, DownloadProgress, GameVersion, PatchNote } from "./lib/types";
+import { AuthAccount, DownloadProgress, GameVersion, Installation, PatchNote } from "./lib/types";
 import FriendsPage from "./pages/Friends";
 import Homepage from "./pages/Home";
 import InstallationsPage from "./pages/Installations";
@@ -27,7 +27,6 @@ function App() {
     setActiveIndex,
     server,
     setVersions,
-    activeInstall,
     setLaunching,
     setAuthLoading,
     setStatus,
@@ -38,6 +37,10 @@ function App() {
     openedDialog,
     setOpenedDialog,
     launcherSettings,
+    invokeCreateInstallation,
+    activeInstall,
+    setActiveInstall,
+    setInstallations,
   } = useAppStateContext();
 
   const { setIsOpen: setAccountDropdownOpen } = accountDropdown;
@@ -191,6 +194,26 @@ function App() {
 
   const dialogDragStartedInside = useRef(false);
 
+  const handleCreateInstallation = async (payload: Installation): Promise<Installation | null> => {
+    try {
+      const inst = await invokeCreateInstallation(payload);
+      setInstallations((prev) => [...prev, inst]);
+      if (!activeInstall) setActiveInstall(inst);
+      return inst;
+    } catch (e) {
+      console.error("Failed to create installation", e);
+      return null;
+    }
+  };
+
+  useEffect(() => {
+    invoke<Installation[]>("get_installations")
+      .then((installs) => {
+        setInstallations(installs);
+      })
+      .catch((e) => console.error("Failed to get_installations: ", e));
+  }, [setInstallations]);
+
   return (
     <div className="app">
       <Titlebar />
@@ -233,7 +256,12 @@ function App() {
             }
           }}
         >
-          {openedDialog.name === "installation" && <InstallationDialog {...openedDialog.props} />}
+          {openedDialog.name === "installation" && (
+            <InstallationDialog
+              {...openedDialog.props}
+              handleCreateInstallation={handleCreateInstallation}
+            />
+          )}
           {openedDialog.name === "confirm_dialog" && <ConfirmDialog {...openedDialog.props} />}
         </div>
       )}

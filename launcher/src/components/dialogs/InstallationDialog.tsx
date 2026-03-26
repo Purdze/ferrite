@@ -11,15 +11,17 @@ export type InstallationDialogProps =
   | { editing: false }
   | { editing: true; installation: Installation };
 
-export function InstallationDialog(dialogProps: InstallationDialogProps) {
+export function InstallationDialog({
+  handleCreateInstallation,
+  ...dialogProps
+}: InstallationDialogProps & {
+  handleCreateInstallation: (payload: Installation) => Promise<Installation | null>;
+}) {
   const {
     versions,
-    invokeCreateInstallation,
     installations,
-    activeInstall,
     setActiveInstall,
     setPage,
-    setInstallations,
     setVersions,
     setStatus,
     setDownloadProgress,
@@ -40,19 +42,6 @@ export function InstallationDialog(dialogProps: InstallationDialogProps) {
       createdAt: 0,
     };
   }
-
-  const handleCreateInstallation = async (payload: Installation): Promise<Installation | null> => {
-    try {
-      const inst = await invokeCreateInstallation(payload);
-      setInstallations((prev) => [...prev, inst]);
-      if (!activeInstall) setActiveInstall(inst);
-      return inst;
-    } catch (e) {
-      console.log(e);
-      setStatus(`Failed to create installation: ${e}`);
-      return null;
-    }
-  };
 
   const editing = dialogProps.editing;
 
