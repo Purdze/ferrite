@@ -25,7 +25,7 @@ export function InstallationDialog(dialogProps: InstallationDialogProps) {
       id: crypto.randomUUID(),
       name: "",
       version: versions[0]?.id || "",
-      lastPlayed: "Never",
+      lastPlayed: null,
       directory: "",
       width: 854,
       height: 480,

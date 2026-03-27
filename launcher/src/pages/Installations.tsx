@@ -46,7 +46,7 @@ export default function InstallationsPage() {
               <span className="install-card-name">{inst.name}</span>
               <span className="install-card-version">{inst.version}</span>
             </div>
-            <span className="install-card-played">{inst.lastPlayed}</span>
+            <span className="install-card-played">{inst.lastPlayed || "Never"}</span>
             <button
               className="install-play-btn"
               onClick={() => {

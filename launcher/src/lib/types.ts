@@ -28,7 +28,7 @@ export interface Installation {
   id: string;
   name: string;
   version: string;
-  lastPlayed: string;
+  lastPlayed: string | null;
   directory: string;
   width: number;
   height: number;
