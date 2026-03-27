@@ -2,8 +2,8 @@ use std::path::Path;
 use std::sync::{Arc, Mutex};
 
 use ash::vk;
-use gpu_allocator::vulkan::{Allocation, AllocationCreateDesc, AllocationScheme, Allocator};
 use gpu_allocator::MemoryLocation;
+use gpu_allocator::vulkan::{Allocation, AllocationCreateDesc, AllocationScheme, Allocator};
 
 pub fn create_gpu_image(
     device: &ash::Device,
@@ -341,19 +341,21 @@ pub const DEPTH_SUBRESOURCE_RANGE: vk::ImageSubresourceRange = vk::ImageSubresou
 };
 
 pub unsafe fn create_nearest_sampler(device: &ash::Device) -> vk::Sampler {
-    create_nearest_sampler_mipmapped(device, 1)
+    unsafe { create_nearest_sampler_mipmapped(device, 1) }
 }
 
 pub unsafe fn create_linear_sampler(device: &ash::Device) -> vk::Sampler {
-    let info = vk::SamplerCreateInfo::default()
-        .mag_filter(vk::Filter::LINEAR)
-        .min_filter(vk::Filter::LINEAR)
-        .address_mode_u(vk::SamplerAddressMode::CLAMP_TO_EDGE)
-        .address_mode_v(vk::SamplerAddressMode::CLAMP_TO_EDGE)
-        .address_mode_w(vk::SamplerAddressMode::CLAMP_TO_EDGE);
-    device
-        .create_sampler(&info, None)
-        .expect("failed to create linear sampler")
+    unsafe {
+        let info = vk::SamplerCreateInfo::default()
+            .mag_filter(vk::Filter::LINEAR)
+            .min_filter(vk::Filter::LINEAR)
+            .address_mode_u(vk::SamplerAddressMode::CLAMP_TO_EDGE)
+            .address_mode_v(vk::SamplerAddressMode::CLAMP_TO_EDGE)
+            .address_mode_w(vk::SamplerAddressMode::CLAMP_TO_EDGE);
+        device
+            .create_sampler(&info, None)
+            .expect("failed to create linear sampler")
+    }
 }
 
 pub fn calculate_mip_levels(w: u32, h: u32) -> u32 {
@@ -607,21 +609,23 @@ pub unsafe fn create_nearest_sampler_mipmapped(
     device: &ash::Device,
     mip_levels: u32,
 ) -> vk::Sampler {
-    let mipmap_mode = if mip_levels > 1 {
-        vk::SamplerMipmapMode::LINEAR
-    } else {
-        vk::SamplerMipmapMode::NEAREST
-    };
-    let info = vk::SamplerCreateInfo::default()
-        .mag_filter(vk::Filter::NEAREST)
-        .min_filter(vk::Filter::NEAREST)
-        .mipmap_mode(mipmap_mode)
-        .address_mode_u(vk::SamplerAddressMode::CLAMP_TO_EDGE)
-        .address_mode_v(vk::SamplerAddressMode::CLAMP_TO_EDGE)
-        .address_mode_w(vk::SamplerAddressMode::CLAMP_TO_EDGE)
-        .min_lod(0.0)
-        .max_lod(mip_levels as f32);
-    device
-        .create_sampler(&info, None)
-        .expect("failed to create nearest sampler")
+    unsafe {
+        let mipmap_mode = if mip_levels > 1 {
+            vk::SamplerMipmapMode::LINEAR
+        } else {
+            vk::SamplerMipmapMode::NEAREST
+        };
+        let info = vk::SamplerCreateInfo::default()
+            .mag_filter(vk::Filter::NEAREST)
+            .min_filter(vk::Filter::NEAREST)
+            .mipmap_mode(mipmap_mode)
+            .address_mode_u(vk::SamplerAddressMode::CLAMP_TO_EDGE)
+            .address_mode_v(vk::SamplerAddressMode::CLAMP_TO_EDGE)
+            .address_mode_w(vk::SamplerAddressMode::CLAMP_TO_EDGE)
+            .min_lod(0.0)
+            .max_lod(mip_levels as f32);
+        device
+            .create_sampler(&info, None)
+            .expect("failed to create nearest sampler")
+    }
 }

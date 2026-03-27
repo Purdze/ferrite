@@ -15,8 +15,8 @@ use serde::{Deserialize, Serialize};
 use crate::window::DisplayMode;
 
 use crate::renderer::pipelines::menu_overlay::{
-    MenuElement, ICON_CHECK, ICON_CODE, ICON_COMMENT, ICON_GEAR, ICON_GLOBE, ICON_LINK,
-    ICON_PAINTBRUSH, ICON_USER,
+    ICON_CHECK, ICON_CODE, ICON_COMMENT, ICON_GEAR, ICON_GLOBE, ICON_LINK, ICON_PAINTBRUSH,
+    ICON_USER, MenuElement,
 };
 
 #[derive(Serialize, Deserialize)]
@@ -54,7 +54,7 @@ fn save_settings(game_dir: &Path, settings: &Settings) {
 use super::auth::{self, AuthAccount, AuthStatus};
 use super::common::{self, WHITE};
 use super::server_list::{
-    is_valid_address, ping_all_servers, PingResults, PingState, ServerEntry, ServerList,
+    PingResults, PingState, ServerEntry, ServerList, is_valid_address, ping_all_servers,
 };
 
 use helpers::*;

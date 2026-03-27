@@ -3,8 +3,8 @@ use azalea_core::registry_holder::RegistryHolder;
 use azalea_protocol::packets::game::{ClientboundGamePacket, ServerboundGamePacket};
 use crossbeam_channel::Sender;
 
-use super::sender::PacketSender;
 use super::NetworkEvent;
+use super::sender::PacketSender;
 
 pub fn handle_game_packet(
     packet: &ClientboundGamePacket,
@@ -234,26 +234,25 @@ pub fn handle_game_packet(
         }
         ClientboundGamePacket::SetEntityData(p) => {
             for item in p.packed_items.iter() {
-                if item.index == 8 {
-                    if let azalea_entity::EntityDataValue::ItemStack(
+                if item.index == 8
+                    && let azalea_entity::EntityDataValue::ItemStack(
                         azalea_inventory::ItemStack::Present(data),
                     ) = &item.value
-                    {
-                        let name = crate::player::inventory::item_resource_name(data.kind);
-                        let _ = event_tx.try_send(NetworkEvent::EntityItemData {
-                            id: p.id.0,
-                            item_name: name,
-                            count: data.count,
-                        });
-                    }
+                {
+                    let name = crate::player::inventory::item_resource_name(data.kind);
+                    let _ = event_tx.try_send(NetworkEvent::EntityItemData {
+                        id: p.id.0,
+                        item_name: name,
+                        count: data.count,
+                    });
                 }
-                if item.index == 16 {
-                    if let azalea_entity::EntityDataValue::Boolean(is_baby) = &item.value {
-                        let _ = event_tx.try_send(NetworkEvent::EntityBabyFlag {
-                            id: p.id.0,
-                            is_baby: *is_baby,
-                        });
-                    }
+                if item.index == 16
+                    && let azalea_entity::EntityDataValue::Boolean(is_baby) = &item.value
+                {
+                    let _ = event_tx.try_send(NetworkEvent::EntityBabyFlag {
+                        id: p.id.0,
+                        is_baby: *is_baby,
+                    });
                 }
             }
         }

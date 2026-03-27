@@ -745,13 +745,12 @@ fn mesh_chunk_snapshot(
                     continue;
                 }
 
-                if lod == 0 {
-                    if let Some(ref tm) = type_map {
-                        if tm.get_id(state) != 0 {
-                            by += step;
-                            continue;
-                        }
-                    }
+                if lod == 0
+                    && let Some(ref tm) = type_map
+                    && tm.get_id(state) != 0
+                {
+                    by += step;
+                    continue;
                 }
 
                 let block_pos = [bx as f32, by as f32, bz as f32];

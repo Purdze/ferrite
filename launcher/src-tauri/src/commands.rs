@@ -395,23 +395,23 @@ fn find_client_binary() -> Result<std::path::PathBuf, String> {
     #[cfg(target_family = "unix")]
     const EXENAME: &str = "pomc";
 
-    if let Ok(exe) = std::env::current_exe() {
-        if let Some(dir) = exe.parent() {
-            let same_dir = dir.join(EXENAME);
-            if same_dir.exists() {
-                return Ok(same_dir);
-            }
+    if let Ok(exe) = std::env::current_exe()
+        && let Some(dir) = exe.parent()
+    {
+        let same_dir = dir.join(EXENAME);
+        if same_dir.exists() {
+            return Ok(same_dir);
+        }
 
-            let mut ancestor = dir.to_path_buf();
-            for _ in 0..6 {
-                if !ancestor.pop() {
-                    break;
-                }
-                for profile in ["release", "debug"] {
-                    let candidate = ancestor.join("target").join(profile).join(EXENAME);
-                    if candidate.exists() {
-                        return Ok(candidate);
-                    }
+        let mut ancestor = dir.to_path_buf();
+        for _ in 0..6 {
+            if !ancestor.pop() {
+                break;
+            }
+            for profile in ["release", "debug"] {
+                let candidate = ancestor.join("target").join(profile).join(EXENAME);
+                if candidate.exists() {
+                    return Ok(candidate);
                 }
             }
         }

@@ -134,11 +134,7 @@ impl BlockRegistry {
             }
         }
 
-        if quads.is_empty() {
-            None
-        } else {
-            Some(quads)
-        }
+        if quads.is_empty() { None } else { Some(quads) }
     }
 
     pub fn is_opaque_full_cube(&self, state: BlockState) -> bool {
@@ -198,9 +194,9 @@ fn load_cache(path: &Path) -> Option<HashMap<String, FaceTextures>> {
 }
 
 fn save_cache(path: &Path, textures: &HashMap<String, FaceTextures>) {
-    if let Ok(json) = serde_json::to_string(textures) {
-        if let Err(e) = std::fs::write(path, json) {
-            log::warn!("Failed to write block cache: {e}");
-        }
+    if let Ok(json) = serde_json::to_string(textures)
+        && let Err(e) = std::fs::write(path, json)
+    {
+        log::warn!("Failed to write block cache: {e}");
     }
 }

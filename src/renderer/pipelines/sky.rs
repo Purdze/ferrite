@@ -6,11 +6,11 @@ use ash::vk;
 use glam::{Mat4, Vec3};
 use gpu_allocator::vulkan::{Allocation, Allocator};
 
-use crate::assets::{resolve_asset_path, AssetIndex};
+use crate::assets::{AssetIndex, resolve_asset_path};
+use crate::renderer::MAX_FRAMES_IN_FLIGHT;
 use crate::renderer::camera::Camera;
 use crate::renderer::shader;
 use crate::renderer::util;
-use crate::renderer::MAX_FRAMES_IN_FLIGHT;
 
 const STAR_COUNT: u32 = 1500;
 const SUN_SIZE: f32 = 30.0;
@@ -281,7 +281,10 @@ impl SkyPipeline {
 
         log::info!(
             "Sky pipeline initialized ({} top_disc, {} star, 6 sun, 6 moon, {} sunrise, {} dark_disc vertices)",
-            geom.top_disc_count, geom.star_count, geom.sunrise_count, geom.dark_disc_count
+            geom.top_disc_count,
+            geom.star_count,
+            geom.sunrise_count,
+            geom.dark_disc_count
         );
 
         Self {

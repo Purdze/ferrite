@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 
 use serde::Deserialize;
 
-use crate::assets::{resolve_asset_path, AssetIndex};
+use crate::assets::{AssetIndex, resolve_asset_path};
 
 use super::registry::{FaceTextures, Tint};
 
@@ -469,10 +469,10 @@ fn resolve_ref(value: &str, map: &HashMap<String, String>, depth: u32) -> String
     if depth > 10 {
         return value.to_string();
     }
-    if let Some(ref_name) = value.strip_prefix('#') {
-        if let Some(target) = map.get(ref_name) {
-            return resolve_ref(target, map, depth + 1);
-        }
+    if let Some(ref_name) = value.strip_prefix('#')
+        && let Some(target) = map.get(ref_name)
+    {
+        return resolve_ref(target, map, depth + 1);
     }
     value.to_string()
 }

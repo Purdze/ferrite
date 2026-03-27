@@ -14,9 +14,9 @@ use crossbeam_channel::Sender;
 use thiserror::Error;
 use tokio::sync::mpsc;
 
+use super::NetworkEvent;
 use super::handler::handle_game_packet;
 use super::sender::PacketSender;
-use super::NetworkEvent;
 
 #[derive(Error, Debug)]
 pub enum ConnectionError {
@@ -311,7 +311,7 @@ async fn config_sequence(
 fn extract_biome_climate(
     holder: &azalea_core::registry_holder::RegistryHolder,
 ) -> std::collections::HashMap<u32, crate::renderer::chunk::mesher::BiomeClimate> {
-    use crate::renderer::chunk::mesher::{int_to_rgb, BiomeClimate, GrassColorModifier};
+    use crate::renderer::chunk::mesher::{BiomeClimate, GrassColorModifier, int_to_rgb};
 
     let mut result = std::collections::HashMap::new();
     let biome_key: azalea_registry::identifier::Identifier = "minecraft:worldgen/biome".into();

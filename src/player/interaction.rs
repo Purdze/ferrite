@@ -3,10 +3,10 @@ use std::collections::HashMap;
 use azalea_block::BlockState;
 use azalea_core::direction::Direction;
 use azalea_core::position::BlockPos;
+use azalea_protocol::packets::game::ServerboundGamePacket;
 use azalea_protocol::packets::game::s_interact::InteractionHand;
 use azalea_protocol::packets::game::s_player_action::{Action, ServerboundPlayerAction};
 use azalea_protocol::packets::game::s_use_item_on::{BlockHit, ServerboundUseItemOn};
-use azalea_protocol::packets::game::ServerboundGamePacket;
 use glam::Vec3;
 
 use crate::net::sender::PacketSender;

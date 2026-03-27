@@ -54,10 +54,10 @@ impl ServerList {
     }
 
     pub fn save(&self) {
-        if let Ok(json) = serde_json::to_string_pretty(&self.servers) {
-            if let Err(e) = std::fs::write(&self.path, json) {
-                log::warn!("Failed to save server list: {e}");
-            }
+        if let Ok(json) = serde_json::to_string_pretty(&self.servers)
+            && let Err(e) = std::fs::write(&self.path, json)
+        {
+            log::warn!("Failed to save server list: {e}");
         }
     }
 
@@ -97,9 +97,9 @@ pub fn ping_all_servers(
 async fn ping_server(address: String, results: PingResults) {
     use azalea_protocol::connect::Connection;
     use azalea_protocol::packets::handshake::s_intention::ServerboundIntention;
+    use azalea_protocol::packets::status::ClientboundStatusPacket;
     use azalea_protocol::packets::status::s_ping_request::ServerboundPingRequest;
     use azalea_protocol::packets::status::s_status_request::ServerboundStatusRequest;
-    use azalea_protocol::packets::status::ClientboundStatusPacket;
     use azalea_protocol::packets::{ClientIntention, PROTOCOL_VERSION};
 
     let result = async {

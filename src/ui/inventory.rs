@@ -1,7 +1,7 @@
 use azalea_inventory::ItemStack;
 
 use super::common::{self, WHITE};
-use crate::player::inventory::{item_resource_name, Inventory};
+use crate::player::inventory::{Inventory, item_resource_name};
 use crate::renderer::pipelines::menu_overlay::{MenuElement, SpriteId};
 
 const INV_TEX_W: f32 = 176.0;

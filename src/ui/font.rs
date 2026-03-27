@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::path::Path;
 
-use crate::assets::{load_image, resolve_asset_path, AssetIndex};
+use crate::assets::{AssetIndex, load_image, resolve_asset_path};
 
 const GRID_COLS: u32 = 16;
 const GRID_ROWS: u32 = 16;

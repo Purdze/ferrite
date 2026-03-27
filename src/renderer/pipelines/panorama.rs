@@ -1,10 +1,10 @@
 use std::sync::{Arc, Mutex};
 
 use ash::vk;
-use gpu_allocator::vulkan::{Allocation, AllocationCreateDesc, AllocationScheme, Allocator};
 use gpu_allocator::MemoryLocation;
+use gpu_allocator::vulkan::{Allocation, AllocationCreateDesc, AllocationScheme, Allocator};
 
-use crate::assets::{resolve_asset_path, AssetIndex};
+use crate::assets::{AssetIndex, resolve_asset_path};
 use crate::renderer::shader;
 use crate::renderer::util;
 

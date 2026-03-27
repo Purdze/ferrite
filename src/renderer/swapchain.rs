@@ -2,8 +2,8 @@ use std::sync::{Arc, Mutex};
 
 use ash::khr::{surface, swapchain};
 use ash::vk;
-use gpu_allocator::vulkan::{Allocation, AllocationCreateDesc, AllocationScheme, Allocator};
 use gpu_allocator::MemoryLocation;
+use gpu_allocator::vulkan::{Allocation, AllocationCreateDesc, AllocationScheme, Allocator};
 
 use super::context::ContextError;
 use super::util;

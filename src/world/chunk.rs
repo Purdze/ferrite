@@ -4,9 +4,9 @@ use std::sync::Arc;
 use azalea_block::BlockState;
 use azalea_core::heightmap_kind::HeightmapKind;
 use azalea_core::position::ChunkPos;
+use azalea_world::chunk::Chunk;
 use azalea_world::chunk::partial::PartialChunkStorage;
 use azalea_world::chunk::storage::ChunkStorage;
-use azalea_world::chunk::Chunk;
 use parking_lot::RwLock;
 use thiserror::Error;
 

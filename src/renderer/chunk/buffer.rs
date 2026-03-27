@@ -6,9 +6,9 @@ use azalea_core::position::ChunkPos;
 use gpu_allocator::vulkan::{Allocation, Allocator};
 
 use super::mesher::{ChunkMeshData, ChunkVertex};
+use crate::renderer::MAX_FRAMES_IN_FLIGHT;
 use crate::renderer::shader;
 use crate::renderer::util;
-use crate::renderer::MAX_FRAMES_IN_FLIGHT;
 
 const BUCKET_VERTICES: u32 = 32768;
 const BUCKET_INDICES: u32 = 49152;

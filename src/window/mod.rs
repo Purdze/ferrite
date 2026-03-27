@@ -14,12 +14,12 @@ use winit::window::{CursorGrabMode, Window, WindowId};
 use crate::entity::EntityStore;
 use crate::net::NetworkEvent;
 use crate::physics::movement;
-use crate::player::interaction::InteractionState;
 use crate::player::LocalPlayer;
+use crate::player::interaction::InteractionState;
+use crate::renderer::Renderer;
 use crate::renderer::chunk::mesher::MeshDispatcher;
 use crate::renderer::pipelines::entity_renderer::EntityRenderInfo;
 use crate::renderer::pipelines::menu_overlay::MenuElement;
-use crate::renderer::Renderer;
 use crate::ui::chat::ChatState;
 use crate::ui::common::{self, WHITE};
 use crate::ui::hud;
@@ -809,61 +809,61 @@ impl ApplicationHandler for App {
                 }
             }
             WindowEvent::KeyboardInput { event, .. } => {
-                if event.state.is_pressed() {
-                    if let PhysicalKey::Code(KeyCode::F11) = event.physical_key {
-                        self.display_mode = self.display_mode.cycle();
-                        self.menu.display_mode = self.display_mode;
-                        self.apply_display_mode();
-                    }
+                if event.state.is_pressed()
+                    && let PhysicalKey::Code(KeyCode::F11) = event.physical_key
+                {
+                    self.display_mode = self.display_mode.cycle();
+                    self.menu.display_mode = self.display_mode;
+                    self.apply_display_mode();
                 }
                 match self.state {
                     GameState::Menu => self.input.on_menu_key_event(&event),
                     GameState::Connecting | GameState::Loading => {
-                        if event.state.is_pressed() {
-                            if let PhysicalKey::Code(KeyCode::Escape) = event.physical_key {
-                                self.disconnect_to_menu(None);
-                            }
+                        if event.state.is_pressed()
+                            && let PhysicalKey::Code(KeyCode::Escape) = event.physical_key
+                        {
+                            self.disconnect_to_menu(None);
                         }
                     }
                     GameState::InGame => {
-                        if event.state.is_pressed() {
-                            if let PhysicalKey::Code(code) = event.physical_key {
-                                if self.chat.is_open() {
-                                    match code {
-                                        KeyCode::Escape => {
-                                            self.chat.close();
-                                            self.apply_cursor_grab();
-                                        }
-                                        KeyCode::F3 => self.show_debug = !self.show_debug,
-                                        _ => self.input.on_menu_key_event(&event),
+                        if event.state.is_pressed()
+                            && let PhysicalKey::Code(code) = event.physical_key
+                        {
+                            if self.chat.is_open() {
+                                match code {
+                                    KeyCode::Escape => {
+                                        self.chat.close();
+                                        self.apply_cursor_grab();
                                     }
-                                } else {
-                                    match code {
-                                        KeyCode::Escape => {
-                                            if self.inventory_open {
-                                                self.inventory_open = false;
-                                            } else {
-                                                self.paused = !self.paused;
-                                            }
-                                            self.apply_cursor_grab();
+                                    KeyCode::F3 => self.show_debug = !self.show_debug,
+                                    _ => self.input.on_menu_key_event(&event),
+                                }
+                            } else {
+                                match code {
+                                    KeyCode::Escape => {
+                                        if self.inventory_open {
+                                            self.inventory_open = false;
+                                        } else {
+                                            self.paused = !self.paused;
                                         }
-                                        KeyCode::KeyE if !self.paused => {
-                                            self.inventory_open = !self.inventory_open;
-                                            self.apply_cursor_grab();
-                                        }
-                                        KeyCode::KeyT if !self.paused && !self.inventory_open => {
-                                            self.chat.open();
-                                            self.apply_cursor_grab();
-                                        }
-                                        KeyCode::Slash if !self.paused && !self.inventory_open => {
-                                            self.chat.open_with_slash();
-                                            self.apply_cursor_grab();
-                                        }
-                                        KeyCode::F3 => {
-                                            self.show_debug = !self.show_debug;
-                                        }
-                                        _ => {}
+                                        self.apply_cursor_grab();
                                     }
+                                    KeyCode::KeyE if !self.paused => {
+                                        self.inventory_open = !self.inventory_open;
+                                        self.apply_cursor_grab();
+                                    }
+                                    KeyCode::KeyT if !self.paused && !self.inventory_open => {
+                                        self.chat.open();
+                                        self.apply_cursor_grab();
+                                    }
+                                    KeyCode::Slash if !self.paused && !self.inventory_open => {
+                                        self.chat.open_with_slash();
+                                        self.apply_cursor_grab();
+                                    }
+                                    KeyCode::F3 => {
+                                        self.show_debug = !self.show_debug;
+                                    }
+                                    _ => {}
                                 }
                             }
                         }
@@ -974,10 +974,10 @@ impl ApplicationHandler for App {
                                     self.apply_display_mode();
                                 }
 
-                                if result.clicked_button {
-                                    if let Some(renderer) = &mut self.renderer {
-                                        renderer.trigger_skin_swing();
-                                    }
+                                if result.clicked_button
+                                    && let Some(renderer) = &mut self.renderer
+                                {
+                                    renderer.trigger_skin_swing();
                                 }
 
                                 match action {
@@ -1397,14 +1397,13 @@ impl ApplicationHandler for App {
         _device_id: DeviceId,
         event: DeviceEvent,
     ) {
-        if let DeviceEvent::MouseMotion { delta } = event {
-            if self.input.is_cursor_captured()
-                && !self.paused
-                && !self.inventory_open
-                && !self.chat.is_open()
-            {
-                self.input.on_mouse_motion(delta);
-            }
+        if let DeviceEvent::MouseMotion { delta } = event
+            && self.input.is_cursor_captured()
+            && !self.paused
+            && !self.inventory_open
+            && !self.chat.is_open()
+        {
+            self.input.on_mouse_motion(delta);
         }
     }
 }

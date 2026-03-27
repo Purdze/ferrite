@@ -6,7 +6,7 @@ use gpu_allocator::vulkan::{Allocation, Allocator};
 
 use std::path::Path;
 
-use crate::assets::{resolve_asset_path, AssetIndex};
+use crate::assets::{AssetIndex, resolve_asset_path};
 use crate::renderer::shader;
 use crate::renderer::util;
 use crate::ui::font::GlyphMap;

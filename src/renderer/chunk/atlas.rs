@@ -5,7 +5,7 @@ use std::sync::{Arc, Mutex};
 use ash::vk;
 use gpu_allocator::vulkan::{Allocation, Allocator};
 
-use crate::assets::{resolve_asset_path, AssetIndex};
+use crate::assets::{AssetIndex, resolve_asset_path};
 use crate::renderer::util;
 
 #[derive(Debug, Clone, Copy)]

@@ -4,9 +4,9 @@ use ash::vk;
 use glam::{Mat4, Vec3};
 use gpu_allocator::vulkan::{Allocation, Allocator};
 
+use crate::renderer::MAX_FRAMES_IN_FLIGHT;
 use crate::renderer::shader;
 use crate::renderer::util;
-use crate::renderer::MAX_FRAMES_IN_FLIGHT;
 
 #[repr(C)]
 #[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
@@ -637,7 +637,7 @@ fn add_box(
 fn build_head_mesh() -> Vec<Vertex> {
     let mut v = Vec::new();
     let e = 0.5; // hat overlay inflation (1 pixel bigger in vanilla)
-                 // Head: addBox(-4, -8, -4, 8, 8, 8) @ (0, 0, 0), UV (0, 0)
+    // Head: addBox(-4, -8, -4, 8, 8, 8) @ (0, 0, 0), UV (0, 0)
     add_box(
         &mut v, 0.0, 0.0, 0.0, -4.0, -8.0, -4.0, 8.0, 8.0, 8.0, 0, 0, 8, 8, 8,
     );

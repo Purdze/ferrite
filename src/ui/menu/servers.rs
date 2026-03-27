@@ -166,15 +166,13 @@ impl MainMenu {
             "Join Server",
             has_sel,
         ) && clicked
+            && let Some(idx) = self.selected_server
+            && let Some(server) = self.server_list.servers.get(idx)
         {
-            if let Some(idx) = self.selected_server {
-                if let Some(server) = self.server_list.servers.get(idx) {
-                    action = MenuAction::Connect {
-                        server: server.address.clone(),
-                        username: self.username.clone(),
-                    };
-                }
-            }
+            action = MenuAction::Connect {
+                server: server.address.clone(),
+                username: self.username.clone(),
+            };
         }
         if push_button(
             &mut elements,
@@ -230,16 +228,14 @@ impl MainMenu {
             "Edit",
             has_sel,
         ) && clicked
+            && let Some(idx) = self.selected_server
+            && let Some(server) = self.server_list.servers.get(idx)
         {
-            if let Some(idx) = self.selected_server {
-                if let Some(server) = self.server_list.servers.get(idx) {
-                    self.edit_name = server.name.clone();
-                    self.edit_address = server.address.clone();
-                    self.focused_field = Some(0);
-                    self.cursor_blink = Instant::now();
-                    self.screen = Screen::EditServer(idx);
-                }
-            }
+            self.edit_name = server.name.clone();
+            self.edit_address = server.address.clone();
+            self.focused_field = Some(0);
+            self.cursor_blink = Instant::now();
+            self.screen = Screen::EditServer(idx);
         }
         if push_button(
             &mut elements,
@@ -253,10 +249,9 @@ impl MainMenu {
             "Delete",
             has_sel,
         ) && clicked
+            && let Some(idx) = self.selected_server
         {
-            if let Some(idx) = self.selected_server {
-                self.screen = Screen::ConfirmDelete(idx);
-            }
+            self.screen = Screen::ConfirmDelete(idx);
         }
         if push_button(
             &mut elements,
