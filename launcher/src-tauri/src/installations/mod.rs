@@ -1,6 +1,7 @@
 pub mod fs;
 pub mod registry;
 
+use rand::RngExt;
 use serde::{Deserialize, Serialize};
 use std::num::NonZeroU64;
 use std::path::Path;
@@ -46,18 +47,13 @@ pub enum InstallationError {
 pub struct Id(String);
 impl Id {
     fn new(created_at: u64) -> Self {
-        let mut state = created_at;
-        let chars: Vec<char> = "abcdefghijklmnopqrstuvwxyz0123456789".chars().collect();
-        let suffix: String = (0..4)
-            .map(|_| {
-                state = state
-                    // Knuth MMIX LCG constants - guarantee full 2^64 period
-                    .wrapping_mul(6364136223846793005)
-                    .wrapping_add(1442695040888963407);
-                chars[((state >> 33) as usize) % chars.len()]
-            })
-            .collect();
-
+        const CHARS: &[u8] = b"abcdefghijklmnopqrstuvwxyz0123456789";
+        let mut rng = rand::rng();
+        let mut suffix = [0u8; 4];
+        for b in &mut suffix {
+            *b = CHARS[rng.random_range(0..CHARS.len())];
+        }
+        let suffix = std::str::from_utf8(&suffix).unwrap();
         Id(format!("{created_at}-{suffix}"))
     }
 }
