@@ -1,0 +1,15 @@
+{
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "width": 1280,
+        "height": 720,
+        "resizable": true,
+        "decorations": false,
+        "transparent": true,
+        "visible": false
+      }
+    ]
+  }
+}
