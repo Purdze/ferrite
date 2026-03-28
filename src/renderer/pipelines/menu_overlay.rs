@@ -1627,20 +1627,26 @@ fn push_mc_text(
                 continue;
             };
             let glyph_w = gi.width as f32 * px_scale;
+            let glyph_draw_h = gi.height as f32 * px_scale;
+            let glyph_y_off = gi.y_offset as f32 * px_scale;
 
             let u0 = gi.col as f32 * gm.cell_w as f32 * inv_w;
-            let v0 = gi.row as f32 * gm.cell_h as f32 * inv_h;
+            let v0 = (gi.row as f32 * gm.cell_h as f32 + gi.y_offset as f32) * inv_h;
             let u1 = (gi.col as f32 * gm.cell_w as f32 + gi.width as f32) * inv_w;
-            let v1 = (gi.row as f32 + 1.0) * gm.cell_h as f32 * inv_h;
+            let v1 =
+                (gi.row as f32 * gm.cell_h as f32 + gi.y_offset as f32 + gi.height as f32) * inv_h;
 
             let italic_offset = if span.italic { px_scale } else { 0.0 };
 
+            let sx = cx.round();
+            let sy = (cy + glyph_y_off).round();
+
             push_mc_glyph(
                 verts,
-                cx + px_scale,
-                cy + px_scale,
-                glyph_w,
-                glyph_h,
+                sx + px_scale,
+                sy + px_scale,
+                glyph_w.round(),
+                glyph_draw_h.round(),
                 u0,
                 v0,
                 u1,
@@ -1651,10 +1657,10 @@ fn push_mc_text(
             if span.bold {
                 push_mc_glyph(
                     verts,
-                    cx + 2.0 * px_scale,
-                    cy + px_scale,
-                    glyph_w,
-                    glyph_h,
+                    sx + 2.0 * px_scale,
+                    sy + px_scale,
+                    glyph_w.round(),
+                    glyph_draw_h.round(),
                     u0,
                     v0,
                     u1,
@@ -1666,10 +1672,10 @@ fn push_mc_text(
 
             push_mc_glyph(
                 verts,
-                cx,
-                cy,
-                glyph_w,
-                glyph_h,
+                sx,
+                sy,
+                glyph_w.round(),
+                glyph_draw_h.round(),
                 u0,
                 v0,
                 u1,
@@ -1680,10 +1686,10 @@ fn push_mc_text(
             if span.bold {
                 push_mc_glyph(
                     verts,
-                    cx + px_scale,
-                    cy,
-                    glyph_w,
-                    glyph_h,
+                    sx + px_scale,
+                    sy,
+                    glyph_w.round(),
+                    glyph_draw_h.round(),
                     u0,
                     v0,
                     u1,

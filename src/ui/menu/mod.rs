@@ -298,6 +298,10 @@ impl MainMenu {
         }
     }
 
+    pub fn is_main_screen(&self) -> bool {
+        matches!(self.screen, Screen::Main)
+    }
+
     pub fn show_disconnect(&mut self, reason: String) {
         self.screen = Screen::Disconnected(reason);
     }

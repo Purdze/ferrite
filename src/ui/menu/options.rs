@@ -201,7 +201,7 @@ impl MainMenu {
             done_y = sh - btn_h - done_pad;
             content_bottom = done_y;
 
-            common::push_overlay(&mut elements, sw, sh, 0.5);
+            common::push_overlay(&mut elements, sw, sh, 0.4);
 
             elements.push(MenuElement::Text {
                 x: cx,
