@@ -484,7 +484,12 @@ impl MenuOverlayPipeline {
             .copy_from_slice(bytemuck::cast_slice(&globals));
 
         let mut vertices: Vec<Vertex> = Vec::with_capacity(elements.len() * 24);
+        let mut deferred_tooltips: Vec<&MenuElement> = Vec::new();
         for elem in elements {
+            if matches!(elem, MenuElement::Tooltip { .. }) {
+                deferred_tooltips.push(elem);
+                continue;
+            }
             match elem {
                 MenuElement::Rect {
                     x,
@@ -580,6 +585,9 @@ impl MenuOverlayPipeline {
                                     v0: region.v0,
                                     u1: region.u0 + (region.u1 - region.u0) * u_frac,
                                     v1: region.v0 + (region.v1 - region.v0) * v_frac,
+                                    src_w: region.src_w,
+                                    src_h: region.src_h,
+                                    nine_slice_border: region.nine_slice_border,
                                 };
                                 push_textured_quad(
                                     &mut vertices,
@@ -671,9 +679,111 @@ impl MenuOverlayPipeline {
                         *corner_radius,
                     );
                 }
+                _ => {}
             }
         }
 
+        for elem in &deferred_tooltips {
+            if let MenuElement::Tooltip {
+                x,
+                y,
+                text,
+                scale,
+                screen_w,
+                screen_h,
+            } = elem
+                && let Some(ref gm) = self.mc_glyph_map
+            {
+                let px = *scale / gm.cell_h as f32;
+                let padding = 3.0 * px;
+                let margin = 9.0 * px;
+                let line_h = *scale + 2.0 * px;
+                let max_w = (*screen_w * 0.4).max(100.0);
+
+                let words: Vec<&str> = text.split_whitespace().collect();
+                let mut lines: Vec<String> = Vec::new();
+                let mut current = String::new();
+                let space_w = self.mc_text_width(" ", *scale);
+                for word in &words {
+                    let word_w = self.mc_text_width(word, *scale);
+                    let test_w = if current.is_empty() {
+                        word_w
+                    } else {
+                        self.mc_text_width(&current, *scale) + space_w + word_w
+                    };
+                    if !current.is_empty() && test_w > max_w {
+                        lines.push(current);
+                        current = word.to_string();
+                    } else {
+                        if !current.is_empty() {
+                            current.push(' ');
+                        }
+                        current.push_str(word);
+                    }
+                }
+                if !current.is_empty() {
+                    lines.push(current);
+                }
+
+                let content_w = lines
+                    .iter()
+                    .map(|l| (self.mc_text_width(l, *scale) + px).ceil())
+                    .fold(0.0f32, f32::max);
+                let content_h = lines.len() as f32 * line_h - 2.0 * px;
+
+                let mut text_x = *x + 12.0;
+                let mut text_y = *y - 12.0;
+                if text_x + content_w > *screen_w {
+                    text_x = (*x - 24.0 - content_w).max(4.0);
+                }
+                if text_y + content_h + 3.0 > *screen_h {
+                    text_y = *screen_h - content_h - 3.0;
+                }
+
+                let bg_x = text_x - padding - margin - padding;
+                let bg_y = text_y - padding - margin - padding;
+                let bg_w = content_w + (padding + margin + padding) * 2.0;
+                let bg_h = content_h + (padding + margin + padding) * 2.0;
+                let bg_border = margin;
+                let frame_border = 10.0 * px;
+
+                let white = [1.0f32; 4];
+                if let Some(bg) = self.sprite_atlas.regions.get(&SpriteId::TooltipBackground) {
+                    push_nine_slice(&mut vertices, bg_x, bg_y, bg_w, bg_h, bg, bg_border, white);
+                }
+                if let Some(frame) = self.sprite_atlas.regions.get(&SpriteId::TooltipFrame) {
+                    push_nine_slice(
+                        &mut vertices,
+                        bg_x,
+                        bg_y,
+                        bg_w,
+                        bg_h,
+                        frame,
+                        frame_border,
+                        white,
+                    );
+                }
+
+                for (i, line) in lines.iter().enumerate() {
+                    let span = MotdSpan {
+                        text: line.clone(),
+                        color: white,
+                        bold: false,
+                        italic: false,
+                        strikethrough: false,
+                        underline: false,
+                    };
+                    push_mc_text(
+                        &mut vertices,
+                        gm,
+                        text_x,
+                        text_y + i as f32 * line_h,
+                        &[span],
+                        *scale,
+                    );
+                }
+            }
+        }
         if vertices.is_empty() {
             return;
         }
@@ -730,12 +840,14 @@ impl MenuOverlayPipeline {
             return 0.0;
         };
         let px_scale = scale / gm.cell_h as f32;
-        text.chars()
+        let raw: f32 = text
+            .chars()
             .map(|ch| {
                 let w = gm.glyphs.get(&ch).map(|g| g.width).unwrap_or(gm.cell_w / 2);
                 (w as f32 + 1.0) * px_scale
             })
-            .sum()
+            .sum();
+        raw.ceil()
     }
 
     pub fn recreate_pipeline(&mut self, device: &ash::Device, render_pass: vk::RenderPass) {
@@ -892,6 +1004,14 @@ pub enum MenuElement {
         color_top: [f32; 4],
         color_bottom: [f32; 4],
     },
+    Tooltip {
+        x: f32,
+        y: f32,
+        text: String,
+        scale: f32,
+        screen_w: f32,
+        screen_h: f32,
+    },
     FrostedRect {
         x: f32,
         y: f32,
@@ -928,6 +1048,8 @@ pub enum SpriteId {
     HeaderSeparator,
     FooterSeparator,
     MenuBackground,
+    TooltipBackground,
+    TooltipFrame,
 }
 
 struct SpriteRegion {
@@ -935,6 +1057,9 @@ struct SpriteRegion {
     v0: f32,
     u1: f32,
     v1: f32,
+    src_w: f32,
+    src_h: f32,
+    nine_slice_border: f32,
 }
 
 struct SpriteAtlas {
@@ -963,114 +1088,147 @@ fn build_sprite_atlas(
     vk::Buffer,
     Option<Allocation>,
 ) {
-    let sprites: &[(SpriteId, &str)] = &[
+    let sprites: &[(SpriteId, &str, f32)] = &[
         (
             SpriteId::Hotbar,
             "minecraft/textures/gui/sprites/hud/hotbar.png",
+            0.0,
         ),
         (
             SpriteId::HotbarSelection,
             "minecraft/textures/gui/sprites/hud/hotbar_selection.png",
+            0.0,
         ),
         (
             SpriteId::HeartContainer,
             "minecraft/textures/gui/sprites/hud/heart/container.png",
+            0.0,
         ),
         (
             SpriteId::HeartFull,
             "minecraft/textures/gui/sprites/hud/heart/full.png",
+            0.0,
         ),
         (
             SpriteId::HeartHalf,
             "minecraft/textures/gui/sprites/hud/heart/half.png",
+            0.0,
         ),
         (
             SpriteId::FoodEmpty,
             "minecraft/textures/gui/sprites/hud/food_empty.png",
+            0.0,
         ),
         (
             SpriteId::FoodFull,
             "minecraft/textures/gui/sprites/hud/food_full.png",
+            0.0,
         ),
         (
             SpriteId::FoodHalf,
             "minecraft/textures/gui/sprites/hud/food_half.png",
+            0.0,
         ),
         (
             SpriteId::EmptyHelmet,
             "minecraft/textures/gui/sprites/container/slot/helmet.png",
+            0.0,
         ),
         (
             SpriteId::EmptyChestplate,
             "minecraft/textures/gui/sprites/container/slot/chestplate.png",
+            0.0,
         ),
         (
             SpriteId::EmptyLeggings,
             "minecraft/textures/gui/sprites/container/slot/leggings.png",
+            0.0,
         ),
         (
             SpriteId::EmptyBoots,
             "minecraft/textures/gui/sprites/container/slot/boots.png",
+            0.0,
         ),
         (
             SpriteId::EmptyShield,
             "minecraft/textures/gui/sprites/container/slot/shield.png",
+            0.0,
         ),
         (
             SpriteId::ButtonNormal,
             "minecraft/textures/gui/sprites/widget/button.png",
+            3.0,
         ),
         (
             SpriteId::ButtonHover,
             "minecraft/textures/gui/sprites/widget/button_highlighted.png",
+            3.0,
         ),
         (
             SpriteId::ButtonDisabled,
             "minecraft/textures/gui/sprites/widget/button_disabled.png",
+            1.0,
         ),
         (
             SpriteId::SliderTrack,
             "minecraft/textures/gui/sprites/widget/slider.png",
+            3.0,
         ),
         (
             SpriteId::SliderTrackHover,
             "minecraft/textures/gui/sprites/widget/slider_highlighted.png",
+            3.0,
         ),
         (
             SpriteId::SliderHandle,
             "minecraft/textures/gui/sprites/widget/slider_handle.png",
+            0.0,
         ),
         (
             SpriteId::SliderHandleHover,
             "minecraft/textures/gui/sprites/widget/slider_handle_highlighted.png",
+            0.0,
         ),
         (
             SpriteId::HeaderSeparator,
             "minecraft/textures/gui/inworld_header_separator.png",
+            0.0,
         ),
         (
             SpriteId::FooterSeparator,
             "minecraft/textures/gui/inworld_footer_separator.png",
+            0.0,
         ),
         (
             SpriteId::MenuBackground,
             "minecraft/textures/gui/inworld_menu_background.png",
+            0.0,
+        ),
+        (
+            SpriteId::TooltipBackground,
+            "minecraft/textures/gui/sprites/tooltip/background.png",
+            9.0,
+        ),
+        (
+            SpriteId::TooltipFrame,
+            "minecraft/textures/gui/sprites/tooltip/frame.png",
+            10.0,
         ),
     ];
 
-    let mut images: Vec<(SpriteId, Vec<u8>, u32, u32)> = Vec::new();
-    for &(id, asset_key) in sprites {
+    let mut images: Vec<(SpriteId, Vec<u8>, u32, u32, f32)> = Vec::new();
+    for &(id, asset_key, border) in sprites {
         let path = resolve_asset_path(assets_dir, asset_index, asset_key);
         match crate::assets::load_image(&path) {
             Ok(img) => {
                 let rgba = img.to_rgba8();
                 let w = rgba.width();
                 let h = rgba.height();
-                images.push((id, rgba.into_raw(), w, h));
+                images.push((id, rgba.into_raw(), w, h, border));
             }
             Err(e) => {
                 log::warn!("Failed to load sprite {asset_key}: {e}");
-                images.push((id, vec![255, 0, 255, 255], 1, 1));
+                images.push((id, vec![255, 0, 255, 255], 1, 1, 0.0));
             }
         }
     }
@@ -1094,11 +1252,17 @@ fn build_sprite_atlas(
                 cropped[dst_off..dst_off + row_bytes]
                     .copy_from_slice(&rgba.as_raw()[src_off..src_off + row_bytes]);
             }
-            images.push((SpriteId::InventoryBackground, cropped, crop_w, crop_h));
+            images.push((SpriteId::InventoryBackground, cropped, crop_w, crop_h, 0.0));
         }
         Err(e) => {
             log::warn!("Failed to load inventory background: {e}");
-            images.push((SpriteId::InventoryBackground, vec![255, 0, 255, 255], 1, 1));
+            images.push((
+                SpriteId::InventoryBackground,
+                vec![255, 0, 255, 255],
+                1,
+                1,
+                0.0,
+            ));
         }
     }
 
@@ -1109,7 +1273,7 @@ fn build_sprite_atlas(
     let mut cursor_y = 0u32;
     let mut row_height = 0u32;
 
-    for (id, data, w, h) in &images {
+    for (id, data, w, h, border) in &images {
         if cursor_x + w > atlas_size {
             cursor_x = 0;
             cursor_y += row_height;
@@ -1139,6 +1303,9 @@ fn build_sprite_atlas(
                 v0: cursor_y as f32 * inv,
                 u1: (cursor_x + w) as f32 * inv,
                 v1: (cursor_y + h) as f32 * inv,
+                src_w: *w as f32,
+                src_h: *h as f32,
+                nine_slice_border: *border,
             },
         );
 
@@ -1273,6 +1440,9 @@ fn build_item_atlas(
                 v0: gy as f32 * inv,
                 u1: (gx + ITEM_TILE) as f32 * inv,
                 v1: (gy + ITEM_TILE) as f32 * inv,
+                src_w: ITEM_TILE as f32,
+                src_h: ITEM_TILE as f32,
+                nine_slice_border: 0.0,
             },
         );
 
@@ -1546,15 +1716,20 @@ fn push_nine_slice(
     border: f32,
     tint: [f32; 4],
 ) {
-    let tex_w = region.u1 - region.u0;
-    let tex_h = region.v1 - region.v0;
-    let frac_x = 3.0 / 200.0;
-    let frac_y = 3.0 / 20.0;
-    let bu = frac_x * tex_w;
-    let bv = frac_y * tex_h;
+    let uv_w = region.u1 - region.u0;
+    let uv_h = region.v1 - region.v0;
+    let tex_border = if region.nine_slice_border > 0.0 {
+        region.nine_slice_border
+    } else {
+        3.0
+    };
+    let bu = (tex_border / region.src_w) * uv_w;
+    let bv = (tex_border / region.src_h) * uv_h;
 
-    let xs = [x, x + border, x + w - border, x + w];
-    let ys = [y, y + border, y + h - border, y + h];
+    let bx = border.min(w / 2.0);
+    let by = border.min(h / 2.0);
+    let xs = [x, x + bx, x + w - bx, x + w];
+    let ys = [y, y + by, y + h - by, y + h];
     let us = [region.u0, region.u0 + bu, region.u1 - bu, region.u1];
     let vs = [region.v0, region.v0 + bv, region.v1 - bv, region.v1];
 

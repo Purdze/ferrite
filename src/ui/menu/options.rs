@@ -10,7 +10,7 @@ impl MainMenu {
             format!("FOV: {}", self.fov)
         };
         let rows: Vec<[&str; 2]> = vec![
-            [&fov_label, "Online"],
+            [&fov_label, "Online..."],
             ["Skin Customization...", "Music & Sounds..."],
             ["Video Settings...", "Controls..."],
             ["Language...", "Chat Settings..."],
@@ -19,6 +19,7 @@ impl MainMenu {
         ];
 
         let nav: &[(&str, Screen)] = &[
+            ("Online...", Screen::OptionsOnline),
             ("Skin Customization...", Screen::OptionsSkinCustomization),
             ("Music & Sounds...", Screen::OptionsMusicSounds),
             ("Video Settings...", Screen::OptionsVideo),
@@ -43,6 +44,7 @@ impl MainMenu {
             nav,
             sliders,
             false,
+            &[],
         )
     }
 
@@ -90,6 +92,7 @@ impl MainMenu {
             &[],
             sliders,
             true,
+            &[],
         )
     }
 
@@ -116,6 +119,59 @@ impl MainMenu {
             nav,
             &[],
             true,
+            &[],
+        )
+    }
+
+    pub(super) fn build_options_online(
+        &mut self,
+        sw: f32,
+        sh: f32,
+        input: &MenuInput,
+    ) -> MainMenuResult {
+        let online_status_label = if self.show_online_status {
+            "Show Online Status: ON"
+        } else {
+            "Show Online Status: OFF"
+        };
+        let current_server_label = if self.show_current_server {
+            "Show Current Server: ON"
+        } else {
+            "Show Current Server: OFF"
+        };
+        let rows: Vec<[&str; 2]> = vec![
+            ["Realms Notifications: ON", "Allow Server Listings: ON"],
+            [online_status_label, current_server_label],
+        ];
+        let tooltips: &[(&str, &str)] = &[
+            (
+                "Realms Notifications:",
+                "Receive notifications about Realms updates",
+            ),
+            (
+                "Allow Server Listings:",
+                "Allow servers to list your name in their player list",
+            ),
+            (
+                "Show Online Status:",
+                "Allow friends to see when you're online",
+            ),
+            (
+                "Show Current Server:",
+                "Allow friends to see which server you're on",
+            ),
+        ];
+        self.build_options_grid(
+            sw,
+            sh,
+            input,
+            "Online Options...",
+            Screen::Options,
+            &rows,
+            &[],
+            &[],
+            true,
+            tooltips,
         )
     }
 
@@ -131,6 +187,7 @@ impl MainMenu {
         nav: &[(&str, Screen)],
         sliders: &[(&'static str, f32)],
         header_footer: bool,
+        tooltips: &[(&str, &str)],
     ) -> MainMenuResult {
         if input.escape {
             self.screen = back.clone_screen();
@@ -283,6 +340,9 @@ impl MainMenu {
                     true,
                 );
                 any_hovered |= h;
+                if h && let Some((_, tip)) = tooltips.iter().find(|(p, _)| label.starts_with(p)) {
+                    common::push_tooltip(&mut elements, cursor, sw, sh, gs, tip);
+                }
                 if clicked && h {
                     if let Some((_, target)) = nav.iter().find(|(l, _)| *l == *label) {
                         self.screen = target.clone_screen();
@@ -294,6 +354,14 @@ impl MainMenu {
                     }
                     if label.starts_with("Fullscreen:") {
                         self.display_mode = self.display_mode.cycle();
+                    }
+                    if label.starts_with("Show Online Status:") {
+                        self.show_online_status = !self.show_online_status;
+                        self.save_settings();
+                    }
+                    if label.starts_with("Show Current Server:") {
+                        self.show_current_server = !self.show_current_server;
+                        self.save_settings();
                     }
                 }
             }

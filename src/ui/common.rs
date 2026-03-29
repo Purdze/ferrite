@@ -6,6 +6,24 @@ pub const BTN_H: f32 = 20.0;
 pub const COL_DISABLED: [f32; 4] = [0.35, 0.36, 0.45, 1.0];
 const BTN_BORDER: f32 = 3.0;
 
+pub fn push_tooltip(
+    elements: &mut Vec<MenuElement>,
+    cursor: (f32, f32),
+    screen_w: f32,
+    screen_h: f32,
+    gs: f32,
+    text: &str,
+) {
+    elements.push(MenuElement::Tooltip {
+        x: cursor.0,
+        y: cursor.1,
+        text: text.into(),
+        scale: FONT_SIZE * gs,
+        screen_w,
+        screen_h,
+    });
+}
+
 pub fn push_overlay(elements: &mut Vec<MenuElement>, screen_w: f32, screen_h: f32, alpha: f32) {
     elements.push(MenuElement::Rect {
         x: 0.0,
@@ -99,11 +117,7 @@ pub fn push_slider(
         None
     };
 
-    let track_sprite = if hovered || actively_dragging {
-        SpriteId::SliderTrackHover
-    } else {
-        SpriteId::SliderTrack
-    };
+    let track_sprite = SpriteId::SliderTrack;
     elements.push(MenuElement::NineSlice {
         x,
         y,
@@ -119,13 +133,12 @@ pub fn push_slider(
     } else {
         SpriteId::SliderHandle
     };
-    elements.push(MenuElement::NineSlice {
+    elements.push(MenuElement::Image {
         x: handle_x,
         y,
         w: handle_w,
         h,
         sprite: handle_sprite,
-        border: BTN_BORDER * gs,
         tint: WHITE,
     });
 

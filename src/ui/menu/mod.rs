@@ -26,10 +26,18 @@ struct Settings {
     simulation_distance: u32,
     #[serde(default = "default_fov")]
     fov: u32,
+    #[serde(default = "default_true")]
+    show_online_status: bool,
+    #[serde(default = "default_true")]
+    show_current_server: bool,
 }
 
 fn default_fov() -> u32 {
     70
+}
+
+fn default_true() -> bool {
+    true
 }
 
 impl Default for Settings {
@@ -39,6 +47,8 @@ impl Default for Settings {
             render_distance: 12,
             simulation_distance: 12,
             fov: 70,
+            show_online_status: true,
+            show_current_server: true,
         }
     }
 }
@@ -143,6 +153,7 @@ enum Screen {
     EditServer(usize),
     Disconnected(String),
     Options,
+    OptionsOnline,
     OptionsVideo,
     OptionsSkinCustomization,
     OptionsMusicSounds,
@@ -161,6 +172,7 @@ impl Screen {
         match self {
             Self::Main => Self::Main,
             Self::Options => Self::Options,
+            Self::OptionsOnline => Self::OptionsOnline,
             Self::OptionsVideo => Self::OptionsVideo,
             Self::OptionsSkinCustomization => Self::OptionsSkinCustomization,
             Self::OptionsMusicSounds => Self::OptionsMusicSounds,
@@ -217,6 +229,8 @@ pub struct MainMenu {
     pub render_distance: u32,
     pub simulation_distance: u32,
     pub fov: u32,
+    pub show_online_status: bool,
+    pub show_current_server: bool,
     pub display_mode: DisplayMode,
     active_slider: Option<&'static str>,
     settings_dir: PathBuf,
@@ -261,6 +275,8 @@ impl MainMenu {
             render_distance: settings.render_distance,
             simulation_distance: settings.simulation_distance,
             fov: settings.fov,
+            show_online_status: settings.show_online_status,
+            show_current_server: settings.show_current_server,
             display_mode: DisplayMode::Windowed,
             active_slider: None,
             settings_dir: game_dir.to_path_buf(),
@@ -276,6 +292,8 @@ impl MainMenu {
                 render_distance: self.render_distance,
                 simulation_distance: self.simulation_distance,
                 fov: self.fov,
+                show_online_status: self.show_online_status,
+                show_current_server: self.show_current_server,
             },
         );
     }
@@ -288,6 +306,7 @@ impl MainMenu {
         matches!(
             self.screen,
             Screen::Options
+                | Screen::OptionsOnline
                 | Screen::OptionsVideo
                 | Screen::OptionsSkinCustomization
                 | Screen::OptionsMusicSounds
@@ -343,6 +362,7 @@ impl MainMenu {
                 self.build_disconnected(screen_w, screen_h, input, &text_width_fn)
             }
             Screen::Options => self.build_options(screen_w, screen_h, input),
+            Screen::OptionsOnline => self.build_options_online(screen_w, screen_h, input),
             Screen::OptionsVideo => self.build_options_video(screen_w, screen_h, input),
             Screen::OptionsSkinCustomization => self.build_options_stub(
                 screen_w,
