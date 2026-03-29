@@ -71,7 +71,7 @@ struct ConsoleEvent {
 
 #[tauri::command]
 pub async fn get_patch_notes(count: Option<usize>) -> Result<Vec<PatchNote>, String> {
-    let limit = count.unwrap_or(6);
+    let limit = count.unwrap_or(20);
     let resp: MojangPatchNotes = reqwest::get(PATCH_NOTES_URL)
         .await
         .map_err(|e| e.to_string())?
@@ -79,8 +79,10 @@ pub async fn get_patch_notes(count: Option<usize>) -> Result<Vec<PatchNote>, Str
         .await
         .map_err(|e| e.to_string())?;
 
-    Ok(resp
-        .entries
+    let mut entries = resp.entries;
+    entries.sort_unstable_by(|a, b| b.date.cmp(&a.date));
+
+    Ok(entries
         .into_iter()
         .take(limit)
         .map(|e| PatchNote {
