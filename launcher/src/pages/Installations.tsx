@@ -1,3 +1,4 @@
+import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { useEffect } from "react";
 import {
   HiCube,
@@ -75,7 +76,9 @@ export default function InstallationsPage({ deleteInstallation }: InstallationsP
             </button>
             <button
               className="install-folder-btn"
-              onClick={() => console.log("Open " + inst.directory)}
+              onClick={async () => {
+                await revealItemInDir(inst.directory);
+              }}
             >
               <HiFolder />
             </button>

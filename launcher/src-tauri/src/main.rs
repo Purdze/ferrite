@@ -26,6 +26,7 @@ fn main() {
     }
 
     tauri::Builder::default()
+        .plugin(tauri_plugin_opener::init())
         .setup(|app| {
             storage::ensure_dirs();
             app.manage(AppState::default());
