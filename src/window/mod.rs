@@ -138,6 +138,14 @@ struct App {
     pending_skin_uuid: Option<uuid::Uuid>,
     item_entity_store: ItemEntityStore,
     resource_packs: crate::resource_pack::ResourcePackManager,
+    pending_pack_download: Option<std::thread::JoinHandle<PackDownloadResult>>,
+}
+
+struct PackDownloadResult {
+    id: uuid::Uuid,
+    hash: String,
+    required: bool,
+    result: Result<std::path::PathBuf, crate::resource_pack::PackError>,
 }
 
 struct FpsCounter {
@@ -245,6 +253,7 @@ impl App {
             was_sprinting: false,
             position_send_counter: 0,
             resource_packs,
+            pending_pack_download: None,
         }
     }
 
@@ -689,31 +698,22 @@ impl App {
                     hash,
                     required,
                 } => {
-                    use azalea_protocol::packets::game::s_resource_pack;
                     log::info!("Resource pack push: {id} url={url} required={required}");
-                    let rt = self.tokio_rt.clone();
-                    let result =
-                        rt.block_on(self.resource_packs.download_and_apply(id, &url, &hash));
-                    let action = match &result {
-                        Ok(()) => {
-                            log::info!("Resource pack {id} loaded successfully");
-                            s_resource_pack::Action::SuccessfullyLoaded
+                    let cache_dir = self.resource_packs.server_cache_dir().to_path_buf();
+                    let hash_clone = hash.clone();
+                    let url_clone = url.clone();
+                    self.pending_pack_download = Some(std::thread::spawn(move || {
+                        PackDownloadResult {
+                            id,
+                            hash: hash_clone.clone(),
+                            required,
+                            result: crate::resource_pack::ResourcePackManager::download_server_pack(
+                                &cache_dir,
+                                &url_clone,
+                                &hash_clone,
+                            ),
                         }
-                        Err(e) => {
-                            log::error!("Resource pack {id} failed: {e}");
-                            if required {
-                                disconnect_reason =
-                                    Some(format!("Required resource pack failed: {e}"));
-                            }
-                            s_resource_pack::Action::FailedDownload
-                        }
-                    };
-                    if let Some(sender) = &self.packet_sender {
-                        sender.send(ServerboundGamePacket::ResourcePack(
-                            s_resource_pack::ServerboundResourcePack { id, action },
-                        ));
-                    }
-                    self.menu.active_packs = self.resource_packs.active_pack_info();
+                    }));
                 }
                 NetworkEvent::ResourcePackPop { id } => {
                     if let Some(id) = id {
@@ -727,6 +727,35 @@ impl App {
                     tracing::warn!("Disconnected: {reason}");
                     disconnect_reason = Some(reason);
                 }
+            }
+        }
+
+        if let Some(handle) = &self.pending_pack_download {
+            if handle.is_finished() {
+                let handle = self.pending_pack_download.take().unwrap();
+                let dl = handle.join().expect("pack download thread panicked");
+                use azalea_protocol::packets::game::s_resource_pack;
+                let action = match &dl.result {
+                    Ok(_) => {
+                        self.resource_packs.apply_server_pack(dl.id, &dl.hash);
+                        log::info!("Resource pack {} loaded successfully", dl.id);
+                        s_resource_pack::Action::SuccessfullyLoaded
+                    }
+                    Err(e) => {
+                        log::error!("Resource pack {} failed: {e}", dl.id);
+                        if dl.required {
+                            disconnect_reason =
+                                Some(format!("Required resource pack failed: {e}"));
+                        }
+                        s_resource_pack::Action::FailedDownload
+                    }
+                };
+                if let Some(sender) = &self.packet_sender {
+                    sender.send(ServerboundGamePacket::ResourcePack(
+                        s_resource_pack::ServerboundResourcePack { id: dl.id, action },
+                    ));
+                }
+                self.menu.active_packs = self.resource_packs.active_pack_info();
             }
         }
 

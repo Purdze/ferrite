@@ -88,30 +88,29 @@ impl ResourcePackManager {
         None
     }
 
-    pub fn has_active_packs(&self) -> bool {
-        !self.active_packs.is_empty()
-    }
-
     fn server_pack_dir(&self, hash: &str) -> PathBuf {
         self.server_cache_dir.join(hash)
     }
 
-    fn is_server_cached(&self, hash: &str) -> bool {
-        self.server_pack_dir(hash).is_dir()
-    }
-
-    pub async fn download_and_apply(
-        &mut self,
-        id: uuid::Uuid,
+    pub fn download_server_pack(
+        server_cache_dir: &Path,
         url: &str,
         hash: &str,
-    ) -> Result<(), PackError> {
-        if !self.is_server_cached(hash) {
-            let data = download_pack(url).await?;
+    ) -> Result<PathBuf, PackError> {
+        let dir = server_cache_dir.join(hash);
+        if !dir.is_dir() {
+            let data = reqwest::blocking::get(url)
+                .map_err(|e| PackError::Download(e.to_string()))?
+                .bytes()
+                .map_err(|e| PackError::Download(e.to_string()))?;
+            log::info!("Downloaded {} bytes", data.len());
             validate_hash(&data, hash)?;
-            extract_zip(&data, &self.server_pack_dir(hash))?;
+            extract_zip(&data, &dir)?;
         }
+        Ok(dir)
+    }
 
+    pub fn apply_server_pack(&mut self, id: uuid::Uuid, hash: &str) {
         let pack_id = id.to_string();
         self.active_packs.retain(|p| p.id != pack_id);
         let dir = self.server_pack_dir(hash);
@@ -126,9 +125,7 @@ impl ResourcePackManager {
                 ..info
             },
         });
-
         log::info!("Applied server resource pack {id} (hash: {hash})");
-        Ok(())
     }
 
     pub fn remove_server_pack(&mut self, id: &uuid::Uuid) -> bool {
@@ -208,14 +205,19 @@ impl ResourcePackManager {
         {
             let cursor = std::io::Cursor::new(data);
             if let Ok(archive) = zip::ZipArchive::new(cursor) {
-                let info = parse_pack_meta_dir(&path, name);
+                let info = parse_pack_meta_zip(&path, name).unwrap_or(PackInfo {
+                    name: name.to_owned(),
+                    description: name.to_owned(),
+                    compat: PackCompat::Compatible,
+                    source: PackSource::Local,
+                    enabled: false,
+                });
                 self.active_packs.retain(|p| p.id != name);
                 self.active_packs.push(ActivePack {
                     id: name.to_owned(),
                     source: PackSource::Local,
                     storage: PackStorage::Zip(Mutex::new(archive)),
                     info: PackInfo {
-                        name: name.to_owned(),
                         enabled: true,
                         source: PackSource::Local,
                         ..info
@@ -242,8 +244,8 @@ impl ResourcePackManager {
         &self.available_local
     }
 
-    pub fn packs_dir(&self) -> &Path {
-        &self.packs_dir
+    pub fn server_cache_dir(&self) -> &Path {
+        &self.server_cache_dir
     }
 }
 
@@ -262,19 +264,6 @@ impl std::fmt::Display for PackError {
             Self::Extract(e) => write!(f, "extraction failed: {e}"),
         }
     }
-}
-
-async fn download_pack(url: &str) -> Result<Vec<u8>, PackError> {
-    log::info!("Downloading resource pack from {url}");
-    let resp = reqwest::get(url)
-        .await
-        .map_err(|e| PackError::Download(e.to_string()))?;
-    let bytes = resp
-        .bytes()
-        .await
-        .map_err(|e| PackError::Download(e.to_string()))?;
-    log::info!("Downloaded {} bytes", bytes.len());
-    Ok(bytes.to_vec())
 }
 
 fn validate_hash(data: &[u8], expected: &str) -> Result<(), PackError> {
