@@ -242,6 +242,7 @@ body {
   cursor: pointer;
   transition: all 0.2s;
   position: relative;
+  border: 1px solid transparent;
 }
 
 .nav-btn:hover {
@@ -255,16 +256,23 @@ body {
   border: 1px solid rgba(74, 222, 128, 0.12);
 }
 
-.nav-btn.active::after {
+.nav-btn::after {
   content: "";
   position: absolute;
+  right: 0;
   left: 0;
   top: 8px;
   bottom: 8px;
   width: 3px;
   background: var(--accent);
   border-radius: 2px;
-  box-shadow: 0 0 8px var(--accent-glow);
+  box-shadow: 0 0 8px var(--accent);
+  transform: scaleY(0);
+  transition: transform 0.2s ease;
+}
+
+.nav-btn.active::after {
+  transform: scaleY(1);
 }
 
 .nav-icon {

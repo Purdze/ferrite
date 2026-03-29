@@ -12,14 +12,14 @@ import {
   HiUserGroup,
   HiUserPlus,
 } from "react-icons/hi2";
-import { Page } from "../lib/types";
 import { useAppStateContext } from "../lib/state";
+import { Page } from "../lib/types";
 
 interface NavItem {
   id: Page;
   label: string;
   icon: React.ReactNode;
-  soon?: boolean; // unsure what this does
+  soon?: boolean;
 }
 
 const NAV_ITEMS: Array<NavItem> = [
