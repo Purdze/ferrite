@@ -45,8 +45,7 @@ interface NavProps {
 
 export default function Navbar({ startAddAccount, switchAccount, removeAccount }: NavProps) {
   const {
-    accountDropdownOpen,
-    setAccountDropdownOpen,
+    accountDropdown,
 
     account,
     accounts,
@@ -57,6 +56,8 @@ export default function Navbar({ startAddAccount, switchAccount, removeAccount }
     activeIndex,
     authLoading,
   } = useAppStateContext();
+
+  const { ref: accountDropdownRef } = accountDropdown;
 
   return (
     <nav className="sidebar">
@@ -87,22 +88,16 @@ export default function Navbar({ startAddAccount, switchAccount, removeAccount }
 
       <div className="sidebar-bottom">
         {account ? (
-          <div className="account-switcher">
-            {accountDropdownOpen && (
-              <div className="click-away" onClick={() => setAccountDropdownOpen(false)} />
-            )}
-            <button
-              className="account-bar"
-              onClick={() => setAccountDropdownOpen(!accountDropdownOpen)}
-            >
+          <div className="account-switcher" ref={accountDropdownRef}>
+            <button className="account-bar" onClick={accountDropdown.toggle}>
               <div
                 className="mc-head"
                 style={skinUrl ? { backgroundImage: `url(${skinUrl})` } : undefined}
               />
               <span className="account-username">{account.username}</span>
-              <HiChevronDown className={`account-arrow ${accountDropdownOpen ? "open" : ""}`} />
+              <HiChevronDown className={`account-arrow ${accountDropdown.isOpen ? "open" : ""}`} />
             </button>
-            {accountDropdownOpen && (
+            {accountDropdown.isOpen && (
               <div className="account-dropdown-menu">
                 {accounts.map((acc, i) => (
                   <div
@@ -125,7 +120,7 @@ export default function Navbar({ startAddAccount, switchAccount, removeAccount }
                   className="account-menu-btn"
                   onClick={() => {
                     setPage("settings");
-                    setAccountDropdownOpen(false);
+                    accountDropdown.close();
                   }}
                 >
                   <HiCog6Tooth />
