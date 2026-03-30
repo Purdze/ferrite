@@ -78,7 +78,7 @@ impl Default for Settings {
 }
 
 fn load_settings(game_dir: &Path) -> Settings {
-    let path = game_dir.join("settings.json");
+    let path = game_dir.join("options.json");
     std::fs::read_to_string(&path)
         .ok()
         .and_then(|s| serde_json::from_str(&s).ok())
@@ -86,7 +86,7 @@ fn load_settings(game_dir: &Path) -> Settings {
 }
 
 fn save_settings(game_dir: &Path, settings: &Settings) {
-    let path = game_dir.join("settings.json");
+    let path = game_dir.join("options.json");
     if let Ok(json) = serde_json::to_string_pretty(settings) {
         let _ = std::fs::write(path, json);
     }
