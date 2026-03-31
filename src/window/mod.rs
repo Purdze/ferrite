@@ -91,6 +91,7 @@ struct App {
     net_events: Option<crossbeam_channel::Receiver<NetworkEvent>>,
     chat_sender: Option<crossbeam_channel::Sender<String>>,
     packet_sender: Option<crate::net::sender::PacketSender>,
+    net_task: Option<tokio::task::JoinHandle<()>>,
     chunk_store: ChunkStore,
     entity_store: EntityStore,
     data_dirs: DataDirs,
@@ -168,13 +169,14 @@ impl App {
         tokio_rt: Arc<tokio::runtime::Runtime>,
         presence: Option<crate::discord::DiscordPresence>,
     ) -> Self {
-        let (net_events, chat_sender, packet_sender) = match connection {
+        let (net_events, chat_sender, packet_sender, net_task) = match connection {
             Some(handle) => (
                 Some(handle.events),
                 Some(handle.chat_tx),
                 Some(crate::net::sender::PacketSender::new(handle.packet_tx)),
+                Some(handle.task),
             ),
-            None => (None, None, None),
+            None => (None, None, None, None),
         };
         let state = if net_events.is_some() {
             GameState::Connecting
@@ -192,6 +194,7 @@ impl App {
             net_events,
             chat_sender,
             packet_sender,
+            net_task,
             chunk_store: ChunkStore::new(DEFAULT_RENDER_DISTANCE),
             entity_store: EntityStore::new(),
             asset_index: AssetIndex::load(&data_dirs.indexes_dir, &data_dirs.objects_dir, &version),
@@ -329,14 +332,18 @@ impl App {
         self.net_events = Some(handle.events);
         self.chat_sender = Some(handle.chat_tx);
         self.packet_sender = Some(crate::net::sender::PacketSender::new(handle.packet_tx));
+        self.net_task = Some(handle.task);
         self.state = GameState::Connecting;
         self.apply_cursor_grab();
     }
 
     fn disconnect_to_menu(&mut self, reason: Option<String>) {
-        self.net_events = None;
-        self.chat_sender = None;
         self.packet_sender = None;
+        self.chat_sender = None;
+        self.net_events = None;
+        if let Some(task) = self.net_task.take() {
+            task.abort();
+        }
         self.state = GameState::Menu;
         self.paused = false;
         self.dead = false;
