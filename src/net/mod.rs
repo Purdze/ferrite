@@ -133,6 +133,9 @@ pub enum NetworkEvent {
         item_id: i32,
         collector_id: i32,
     },
+    PlayerDied {
+        message: String,
+    },
     Disconnected {
         reason: String,
     },

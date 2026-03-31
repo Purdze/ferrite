@@ -1,6 +1,7 @@
 pub mod auth;
 pub mod chat;
 pub mod common;
+pub mod death;
 #[allow(dead_code)]
 pub mod font;
 pub mod hud;

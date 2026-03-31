@@ -107,6 +107,9 @@ struct App {
         Arc<std::collections::HashMap<u32, crate::renderer::chunk::mesher::BiomeClimate>>,
     mesh_dispatcher: Option<MeshDispatcher>,
     paused: bool,
+    dead: bool,
+    death_message: String,
+    death_ticks: u32,
     inventory_open: bool,
     chat: ChatState,
     panorama_scroll: f32,
@@ -210,6 +213,9 @@ impl App {
             biome_climate: Arc::new(std::collections::HashMap::new()),
             mesh_dispatcher: None,
             paused: false,
+            dead: false,
+            death_message: String::new(),
+            death_ticks: 0,
             inventory_open: false,
             chat: ChatState::new(),
             panorama_scroll: 0.0,
@@ -456,6 +462,10 @@ impl App {
                     self.player.health = health;
                     self.player.food = food;
                     self.player.saturation = saturation;
+                    if health > 0.0 && self.dead {
+                        self.dead = false;
+                        self.apply_cursor_grab();
+                    }
                 }
                 NetworkEvent::InventoryContent { items } => {
                     self.player.inventory.set_contents(items);
@@ -609,6 +619,15 @@ impl App {
                             )
                         });
                     self.item_entity_store.pickup(item_id, target_pos);
+                }
+                NetworkEvent::PlayerDied { message } => {
+                    self.dead = true;
+                    self.death_message = message;
+                    self.death_ticks = 0;
+                    if let Some(window) = &self.window {
+                        let _ = window.set_cursor_grab(CursorGrabMode::None);
+                        window.set_cursor_visible(true);
+                    }
                 }
                 NetworkEvent::Disconnected { reason } => {
                     log::warn!("Disconnected: {reason}");
@@ -897,7 +916,7 @@ impl ApplicationHandler for App {
                                 }
                             } else {
                                 match code {
-                                    KeyCode::Escape => {
+                                    KeyCode::Escape if !self.dead => {
                                         if self.inventory_open {
                                             self.inventory_open = false;
                                         } else {
@@ -905,7 +924,7 @@ impl ApplicationHandler for App {
                                         }
                                         self.apply_cursor_grab();
                                     }
-                                    KeyCode::KeyE if !self.paused => {
+                                    KeyCode::KeyE if !self.paused && !self.dead => {
                                         self.inventory_open = !self.inventory_open;
                                         self.apply_cursor_grab();
                                     }
@@ -1252,6 +1271,7 @@ impl ApplicationHandler for App {
 
                             let mut close_inventory = false;
                             let mut pause_action = PauseAction::None;
+                            let mut death_action = crate::ui::death::DeathAction::None;
 
                             if let (Some(renderer), Some(window)) =
                                 (&mut self.renderer, &self.window)
@@ -1335,6 +1355,21 @@ impl ApplicationHandler for App {
                                         .menu
                                         .build(sw, sh, &menu_input, |t, s| r.menu_text_width(t, s));
                                     elements.extend(result.elements);
+                                    self.input.clear_click_events();
+                                } else if self.dead {
+                                    let cursor = self.input.cursor_pos();
+                                    let clicked = self.input.left_just_pressed();
+                                    death_action = crate::ui::death::build_death_screen(
+                                        &mut elements,
+                                        sw,
+                                        sh,
+                                        cursor,
+                                        clicked,
+                                        gs,
+                                        &self.death_message,
+                                        self.death_ticks,
+                                    );
+                                    self.death_ticks += 1;
                                     self.input.clear_click_events();
                                 } else if self.paused {
                                     let cursor = self.input.cursor_pos();
@@ -1451,6 +1486,24 @@ impl ApplicationHandler for App {
                             if close_inventory {
                                 self.inventory_open = false;
                                 self.apply_cursor_grab();
+                            }
+
+                            match death_action {
+                                crate::ui::death::DeathAction::Respawn => {
+                                    if let Some(sender) = &self.packet_sender {
+                                        sender.send(ServerboundGamePacket::ClientCommand(
+                                            azalea_protocol::packets::game::s_client_command::ServerboundClientCommand {
+                                                action: azalea_protocol::packets::game::s_client_command::Action::PerformRespawn,
+                                            },
+                                        ));
+                                    }
+                                    self.dead = false;
+                                    self.apply_cursor_grab();
+                                }
+                                crate::ui::death::DeathAction::TitleScreen => {
+                                    self.disconnect_to_menu(None);
+                                }
+                                crate::ui::death::DeathAction::None => {}
                             }
 
                             match pause_action {
