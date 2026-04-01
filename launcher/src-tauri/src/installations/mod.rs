@@ -10,6 +10,7 @@ use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::commands::fetch_versions;
+use crate::installations;
 use crate::storage::installations_dir;
 
 const MAX_NAME_LENGTH: usize = 35;
@@ -20,6 +21,9 @@ const RESERVED_DIRNAMES: &[&str] = &[
 ];
 #[cfg(target_os = "windows")]
 const FORBIDDEN_CHAR: &[char] = &[':', '*', '?', '"', '<', '>', '|'];
+
+const INSTALLATIONS_LATEST_RELEASE_INDEX: usize = 0;
+const INSTALLATIONS_LATEST_SNAPSHOT_INDEX: usize = 1;
 
 #[derive(Debug, thiserror::Error, Serialize)]
 #[serde(tag = "kind", content = "detail")]
@@ -281,29 +285,8 @@ impl Installation {
         })
     }
 }
-impl From<Installation> for InstallationDraft {
-    fn from(value: Installation) -> Self {
-        Self {
-            directory: value.directory.into(),
-            height: value.height,
-            width: value.width,
-            name: value.name.into(),
-            version: value.version.into(),
-        }
-    }
-}
-
-#[derive(Serialize, Deserialize, Debug)]
-pub struct InstallationDraft {
-    pub name: String,
-    pub version: String,
-    pub directory: String,
-    pub width: u32,
-    pub height: u32,
-}
 impl TryFrom<InstallationDraft> for Installation {
     type Error = InstallationError;
-
     fn try_from(value: InstallationDraft) -> Result<Self, Self::Error> {
         let ts = TimeStamp::now();
         let millis: u64 = ts.clone().into();
@@ -323,6 +306,26 @@ impl TryFrom<InstallationDraft> for Installation {
     }
 }
 
+#[derive(Serialize, Deserialize, Debug)]
+pub struct InstallationDraft {
+    pub name: String,
+    pub version: String,
+    pub directory: String,
+    pub width: u32,
+    pub height: u32,
+}
+impl From<Installation> for InstallationDraft {
+    fn from(value: Installation) -> Self {
+        Self {
+            directory: value.directory.into(),
+            height: value.height,
+            width: value.width,
+            name: value.name.into(),
+            version: value.version.into(),
+        }
+    }
+}
+
 //
 //
 // empty intentionally
@@ -334,14 +337,30 @@ pub async fn load_installations() -> Result<Vec<Installation>, InstallationError
         let _lock = registry::lock();
 
         let mut installs = registry::load()?;
-        if !installs.iter().any(|i| i.id == Id::latest_release()) {
-            installs.insert(0, Installation::try_latest_release().await?);
+        if let Ok(latest_release_version) = installations::Version::try_latest_release().await {
+            if let Some(existing) = installs.iter_mut().find(|i| i.id == Id::latest_release()) {
+                existing.version = latest_release_version;
+            } else {
+                installs.insert(
+                    INSTALLATIONS_LATEST_RELEASE_INDEX,
+                    Installation::try_latest_release().await?,
+                );
+            }
         }
-        if !installs.iter().any(|i| i.id == Id::latest_snapshot()) {
-            installs.insert(1, Installation::try_latest_snapshot().await?);
+
+        if let Ok(latest_snapshot_version) = installations::Version::try_latest_snapshot().await {
+            if let Some(existing) = installs.iter_mut().find(|i| i.id == Id::latest_snapshot()) {
+                existing.version = latest_snapshot_version;
+            } else {
+                installs.insert(
+                    INSTALLATIONS_LATEST_SNAPSHOT_INDEX,
+                    Installation::try_latest_snapshot().await?,
+                );
+            }
         }
+
         if let Some(err) = registry::save(&installs).err() {
-            log::warn!("Failed to save registry after loading: {err}");
+            log::warn!("Failed to save registry after loading installations: {err}");
         }
         installs
     };

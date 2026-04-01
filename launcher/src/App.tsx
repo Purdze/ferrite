@@ -317,10 +317,10 @@ function App() {
     invoke<Installation[]>("load_installations")
       .then((installs) => {
         setInstallations(installs);
-        if (!activeInstall) setActiveInstall(installs[0]);
+        setActiveInstall((prev) => prev ?? installs[0]);
       })
       .catch((e) => setStatus("Failed to load installations: " + e));
-  }, [setInstallations, setActiveInstall, activeInstall, setStatus]);
+  }, [setInstallations, setActiveInstall, setStatus]);
 
   useEffect(() => {
     invoke<string[]>("get_downloaded_versions")

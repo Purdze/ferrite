@@ -4,6 +4,7 @@ use crate::{AppState, installations, storage};
 
 use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
+#[cfg(unix)]
 use std::os::unix::process::ExitStatusExt;
 use std::process::Stdio;
 use std::sync::Arc;
