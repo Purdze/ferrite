@@ -113,6 +113,7 @@ struct App {
     death_ticks: u32,
     death_confirm: bool,
     death_confirm_ticks: u32,
+    respawn_sent: bool,
     inventory_open: bool,
     chat: ChatState,
     panorama_scroll: f32,
@@ -223,6 +224,7 @@ impl App {
             death_ticks: 0,
             death_confirm: false,
             death_confirm_ticks: 0,
+            respawn_sent: false,
             inventory_open: false,
             chat: ChatState::new(),
             panorama_scroll: 0.0,
@@ -351,9 +353,8 @@ impl App {
                 },
             ));
         }
-        self.dead = false;
         self.death_confirm = false;
-        self.apply_cursor_grab();
+        self.respawn_sent = true;
     }
 
     fn disconnect_to_menu(&mut self, reason: Option<String>) {
@@ -366,6 +367,7 @@ impl App {
         self.state = GameState::Menu;
         self.paused = false;
         self.dead = false;
+        self.death_message = String::new();
         self.position_set = false;
         self.chunk_store = ChunkStore::new(self.menu.render_distance);
         self.entity_store.clear();
@@ -493,6 +495,14 @@ impl App {
                     if health > 0.0 && self.dead {
                         self.dead = false;
                         self.apply_cursor_grab();
+                    } else if health <= 0.0 && !self.dead {
+                        self.dead = true;
+                        self.death_ticks = 0;
+                        self.respawn_sent = false;
+                        if let Some(window) = &self.window {
+                            let _ = window.set_cursor_grab(CursorGrabMode::None);
+                            window.set_cursor_visible(true);
+                        }
                     }
                 }
                 NetworkEvent::InventoryContent { items } => {
@@ -660,6 +670,7 @@ impl App {
                     self.dead = true;
                     self.death_message = message;
                     self.death_ticks = 0;
+                    self.respawn_sent = false;
                     if let Some(window) = &self.window {
                         let _ = window.set_cursor_grab(CursorGrabMode::None);
                         window.set_cursor_visible(true);
@@ -955,6 +966,12 @@ impl ApplicationHandler for App {
                                 }
                             } else {
                                 match code {
+                                    KeyCode::Escape
+                                        if self.death_confirm && self.death_confirm_ticks >= 20 =>
+                                    {
+                                        self.death_confirm = false;
+                                        self.send_respawn();
+                                    }
                                     KeyCode::Escape if !self.dead => {
                                         if self.inventory_open {
                                             self.inventory_open = false;
@@ -1151,10 +1168,11 @@ impl ApplicationHandler for App {
                                 }
 
                                 let ready = self.position_set
-                                    && self
-                                        .renderer
-                                        .as_ref()
-                                        .is_some_and(|r| r.loaded_chunk_count() > 0);
+                                    && (self.dead
+                                        || self
+                                            .renderer
+                                            .as_ref()
+                                            .is_some_and(|r| r.loaded_chunk_count() > 0));
 
                                 if ready {
                                     if let Some(p) = &mut self.presence {
@@ -1178,7 +1196,6 @@ impl ApplicationHandler for App {
                             }
 
                             let mut cancel = false;
-                            let mut pending_respawn = false;
 
                             if let (Some(renderer), Some(window)) =
                                 (&mut self.renderer, &self.window)
@@ -1197,74 +1214,30 @@ impl ApplicationHandler for App {
                                 let clicked = self.input.left_just_pressed();
                                 let cursor = self.input.cursor_pos();
 
-                                if self.dead {
-                                    let action = if self.death_confirm {
-                                        let a = crate::ui::death::build_death_confirm(
-                                            &mut elements,
-                                            sw,
-                                            sh,
-                                            cursor,
-                                            clicked,
-                                            gs,
-                                            self.death_confirm_ticks,
-                                        );
-                                        self.death_confirm_ticks += 1;
-                                        a
-                                    } else {
-                                        let a = crate::ui::death::build_death_screen(
-                                            &mut elements,
-                                            sw,
-                                            sh,
-                                            cursor,
-                                            clicked,
-                                            gs,
-                                            &self.death_message,
-                                            self.player.score,
-                                            self.death_ticks,
-                                        );
-                                        self.death_ticks += 1;
-                                        a
-                                    };
-                                    match action {
-                                        crate::ui::death::DeathAction::Respawn => {
-                                            self.death_confirm = false;
-                                            pending_respawn = true;
-                                        }
-                                        crate::ui::death::DeathAction::TitleScreen => {
-                                            cancel = true;
-                                        }
-                                        crate::ui::death::DeathAction::ShowConfirm => {
-                                            self.death_confirm = true;
-                                            self.death_confirm_ticks = 0;
-                                        }
-                                        crate::ui::death::DeathAction::None => {}
-                                    }
-                                } else {
-                                    elements.push(MenuElement::Text {
-                                        x: cx,
-                                        y: cy - fs,
-                                        text: status_text.into(),
-                                        scale: fs,
-                                        color: WHITE,
-                                        centered: true,
-                                    });
+                                elements.push(MenuElement::Text {
+                                    x: cx,
+                                    y: cy - fs,
+                                    text: status_text.into(),
+                                    scale: fs,
+                                    color: WHITE,
+                                    centered: true,
+                                });
 
-                                    let btn_y = cy + fs;
-                                    if common::push_button(
-                                        &mut elements,
-                                        cursor,
-                                        cx - btn_w / 2.0,
-                                        btn_y,
-                                        btn_w,
-                                        btn_h,
-                                        gs,
-                                        fs,
-                                        "Cancel",
-                                        true,
-                                    ) && clicked
-                                    {
-                                        cancel = true;
-                                    }
+                                let btn_y = cy + fs;
+                                if common::push_button(
+                                    &mut elements,
+                                    cursor,
+                                    cx - btn_w / 2.0,
+                                    btn_y,
+                                    btn_w,
+                                    btn_h,
+                                    gs,
+                                    fs,
+                                    "Cancel",
+                                    true,
+                                ) && clicked
+                                {
+                                    cancel = true;
                                 }
 
                                 self.input.clear_click_events();
@@ -1281,9 +1254,7 @@ impl ApplicationHandler for App {
                                 }
                             }
 
-                            if pending_respawn {
-                                self.send_respawn();
-                            } else if cancel {
+                            if cancel {
                                 self.disconnect_to_menu(None);
                             }
                         }
@@ -1374,6 +1345,7 @@ impl ApplicationHandler for App {
 
                                 let mut elements: Vec<MenuElement> = Vec::new();
                                 let hide_cursor = !self.paused
+                                    && !self.dead
                                     && !self.inventory_open
                                     && !self.chat.is_open()
                                     && self.input.is_cursor_captured();
@@ -1444,7 +1416,8 @@ impl ApplicationHandler for App {
                                     self.input.clear_click_events();
                                 } else if self.dead {
                                     let cursor = self.input.cursor_pos();
-                                    let clicked = self.input.left_just_pressed();
+                                    let clicked =
+                                        self.input.left_just_pressed() && !self.respawn_sent;
                                     death_action = if self.death_confirm {
                                         let a = crate::ui::death::build_death_confirm(
                                             &mut elements,
@@ -1458,6 +1431,11 @@ impl ApplicationHandler for App {
                                         self.death_confirm_ticks += 1;
                                         a
                                     } else {
+                                        let ticks = if self.respawn_sent {
+                                            0
+                                        } else {
+                                            self.death_ticks
+                                        };
                                         let a = crate::ui::death::build_death_screen(
                                             &mut elements,
                                             sw,
@@ -1467,7 +1445,7 @@ impl ApplicationHandler for App {
                                             gs,
                                             &self.death_message,
                                             self.player.score,
-                                            self.death_ticks,
+                                            ticks,
                                         );
                                         self.death_ticks += 1;
                                         a
@@ -1656,6 +1634,7 @@ impl ApplicationHandler for App {
         if let DeviceEvent::MouseMotion { delta } = event
             && self.input.is_cursor_captured()
             && !self.paused
+            && !self.dead
             && !self.inventory_open
             && !self.chat.is_open()
         {

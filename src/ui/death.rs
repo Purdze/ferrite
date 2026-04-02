@@ -19,7 +19,7 @@ fn push_gradient(elements: &mut Vec<MenuElement>, screen_w: f32, screen_h: f32) 
         h: screen_h,
         corner_radius: 0.0,
         color_top: [0.314, 0.0, 0.0, 0.376],
-        color_bottom: [0.125, 0.0, 0.0, 0.627],
+        color_bottom: [0.502, 0.188, 0.188, 0.627],
     });
 }
 
@@ -139,7 +139,6 @@ pub fn build_death_confirm(
     let mut action = DeathAction::None;
     let fs = common::FONT_SIZE * gs;
     let btn_h = common::BTN_H * gs;
-    let btn_w = BTN_W * gs;
     let cx = screen_w / 2.0;
     let cy = screen_h / 2.0;
     let buttons_enabled = ticks >= 20;
@@ -155,14 +154,18 @@ pub fn build_death_confirm(
         centered: true,
     });
 
+    let confirm_btn_w = 150.0 * gs;
     let gap = 4.0 * gs;
     let btn_y = cy + 10.0 * gs;
+    let total_w = confirm_btn_w * 2.0 + gap;
+    let left_x = cx - total_w / 2.0;
+
     let h = common::push_button(
         elements,
         cursor,
-        cx - btn_w / 2.0,
+        left_x,
         btn_y,
-        btn_w,
+        confirm_btn_w,
         btn_h,
         gs,
         fs,
@@ -176,9 +179,9 @@ pub fn build_death_confirm(
     let h = common::push_button(
         elements,
         cursor,
-        cx - btn_w / 2.0,
-        btn_y + btn_h + gap,
-        btn_w,
+        left_x + confirm_btn_w + gap,
+        btn_y,
+        confirm_btn_w,
         btn_h,
         gs,
         fs,
