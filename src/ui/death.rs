@@ -18,8 +18,8 @@ fn push_gradient(elements: &mut Vec<MenuElement>, screen_w: f32, screen_h: f32) 
         w: screen_w,
         h: screen_h,
         corner_radius: 0.0,
-        color_top: [0.314, 0.0, 0.0, 0.376],
-        color_bottom: [0.502, 0.188, 0.188, 0.627],
+        color_top: [0.080, 0.0, 0.0, 0.376],
+        color_bottom: [0.216, 0.029, 0.029, 0.627],
     });
 }
 
@@ -34,6 +34,7 @@ pub fn build_death_screen(
     message: &str,
     score: i32,
     ticks: u32,
+    text_width_fn: &dyn Fn(&str, f32) -> f32,
 ) -> DeathAction {
     let mut action = DeathAction::None;
     let fs = common::FONT_SIZE * gs;
@@ -67,10 +68,9 @@ pub fn build_death_screen(
 
     let score_label = "Score: ";
     let score_value = score.to_string();
-    let char_w = fs * 0.6;
-    let label_w = char_w * score_label.len() as f32;
     let score_str = score_value.as_str();
-    let value_w = char_w * score_str.len() as f32;
+    let label_w = text_width_fn(score_label, fs);
+    let value_w = text_width_fn(score_str, fs);
     let total_w = label_w + value_w;
     let score_x = cx - total_w / 2.0;
     elements.push(MenuElement::Text {

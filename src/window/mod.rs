@@ -495,14 +495,6 @@ impl App {
                     if health > 0.0 && self.dead {
                         self.dead = false;
                         self.apply_cursor_grab();
-                    } else if health <= 0.0 && !self.dead {
-                        self.dead = true;
-                        self.death_ticks = 0;
-                        self.respawn_sent = false;
-                        if let Some(window) = &self.window {
-                            let _ = window.set_cursor_grab(CursorGrabMode::None);
-                            window.set_cursor_visible(true);
-                        }
                     }
                 }
                 NetworkEvent::InventoryContent { items } => {
@@ -1436,6 +1428,7 @@ impl ApplicationHandler for App {
                                         } else {
                                             self.death_ticks
                                         };
+                                        let r = &*renderer;
                                         let a = crate::ui::death::build_death_screen(
                                             &mut elements,
                                             sw,
@@ -1446,6 +1439,7 @@ impl ApplicationHandler for App {
                                             &self.death_message,
                                             self.player.score,
                                             ticks,
+                                            &|t, s| r.menu_text_width(t, s),
                                         );
                                         self.death_ticks += 1;
                                         a
