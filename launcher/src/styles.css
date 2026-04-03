@@ -505,6 +505,7 @@ body {
   from {
     opacity: 0;
   }
+
   to {
     opacity: 1;
     transform: translateY(0);
@@ -835,6 +836,7 @@ body {
   100% {
     opacity: 1;
   }
+
   50% {
     opacity: 0.5;
   }
@@ -1818,6 +1820,7 @@ body {
     opacity: 0;
     transform: scale(0.96) translateY(8px);
   }
+
   to {
     opacity: 1;
     transform: scale(1) translateY(0);
@@ -2162,13 +2165,55 @@ body {
   border-color: var(--border-light);
 }
 
-.note-title {
+.note-header-banner {
+  position: relative;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  aspect-ratio: 13 / 4;
+  min-height: 150px;
+  margin-bottom: 20px;
+}
+
+.note-header-banner::before {
+  content: "";
+  position: absolute;
+  inset: -12px;
+  background: linear-gradient(135deg, #112237 0%, #0f3822 100%);
+  background-image: inherit;
+  background-size: cover;
+  background-position: center;
+  filter: blur(10px);
+  z-index: 0;
+}
+
+.note-header-gradient {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    180deg,
+    rgba(8, 12, 20, 0.28) 0%,
+    rgba(74, 222, 128, 0.22) 55%,
+    rgba(6, 10, 18, 0.88) 100%
+  );
+}
+
+.note-header-content {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: flex;
+  align-items: flex-end;
+  padding: 22px;
+}
+
+.note-header-title {
   font-family: var(--font-display);
-  font-size: 28px;
+  font-size: 30px;
   font-weight: 700;
   letter-spacing: 2px;
   color: var(--text);
-  margin-bottom: 20px;
+  line-height: 1.15;
+  text-shadow: 0 2px 12px rgba(0, 0, 0, 0.45);
 }
 
 .note-body {
@@ -2194,9 +2239,11 @@ body {
 .note-body h1 {
   font-size: 22px;
 }
+
 .note-body h2 {
   font-size: 18px;
 }
+
 .note-body h3 {
   font-size: 15px;
 }
@@ -2886,12 +2933,15 @@ body {
   &.info {
     --color: var(--console-info);
   }
+
   &.warning {
     --color: var(--console-warning);
   }
+
   &.debug {
     --color: var(--console-debug);
   }
+
   &.error {
     --color: var(--console-error);
   }

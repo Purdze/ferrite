@@ -16,7 +16,17 @@ export default function NewsPage({
           <button className="note-back" onClick={() => setSelectedNote(null)}>
             <HiArrowLeft /> Back
           </button>
-          <h2 className="note-title">{selectedNote.title}</h2>
+          <div
+            className="note-header-banner"
+            style={{
+              backgroundImage: `url(${selectedNote.image_url})`,
+            }}
+          >
+            <div className="note-header-gradient" />
+            <div className="note-header-content">
+              <h2 className="note-header-title">{selectedNote.title}</h2>
+            </div>
+          </div>
           <div className="note-body" dangerouslySetInnerHTML={{ __html: selectedNote.body }} />
         </div>
       ) : (
