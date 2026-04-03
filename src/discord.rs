@@ -2,16 +2,14 @@ use discord_rich_presence::{DiscordIpc, DiscordIpcClient, activity::*};
 
 const DISCORD_CLIENT_ID: &str = "1489624876909330452";
 
-macro_rules! default_activity {
-    ($v:expr) => {
-        Activity::new()
-            .details(format!("Minecraft: Rust Edition — {}", $v))
-            .assets(
-                Assets::new()
-                    .large_image("green-apple")
-                    .large_text("Minecraft client but in rust"),
-            )
-    };
+fn base_activity(version: &str) -> Activity<'static> {
+    Activity::new()
+        .details(format!("Pomme Client — {version}"))
+        .assets(
+            Assets::new()
+                .large_image("green-apple")
+                .large_text("Pomme Client"),
+        )
 }
 
 #[derive(PartialEq)]
@@ -27,15 +25,10 @@ pub struct DiscordPresence {
 }
 
 impl DiscordPresence {
-    pub fn start(version: impl AsRef<str>) -> Result<Self, Box<dyn std::error::Error>> {
-        let version = version.as_ref();
-
+    pub fn start(version: &str) -> Result<Self, Box<dyn std::error::Error>> {
         let mut client = DiscordIpcClient::new(DISCORD_CLIENT_ID);
         client.connect()?;
-
-        let payload = default_activity!(version).state("Starting...");
-
-        client.set_activity(payload)?;
+        client.set_activity(base_activity(version).state("Starting..."))?;
 
         Ok(Self {
             client,
@@ -43,47 +36,25 @@ impl DiscordPresence {
         })
     }
 
-    pub fn set_in_menu(
-        &mut self,
-        version: impl AsRef<str>,
-    ) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn set_in_menu(&mut self, version: &str) {
         if self.state == PresenceState::InMenu {
-            return Ok(());
+            return;
         }
-
-        let version = version.as_ref();
-
-        let payload = default_activity!(version).state("In the menu");
-
         self.state = PresenceState::InMenu;
-        self.set_activity(payload)?;
-
-        Ok(())
+        let _ = self.set_activity(base_activity(version).state("In the menu"));
     }
 
-    pub fn playing_multiplayer(
-        &mut self,
-        version: impl AsRef<str>,
-    ) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn playing_multiplayer(&mut self, version: &str) {
         if self.state == PresenceState::Multiplayer {
-            return Ok(());
+            return;
         }
-
-        let version = version.as_ref();
-
-        let payload = default_activity!(version).state("In a server");
-
         self.state = PresenceState::Multiplayer;
-        self.set_activity(payload)?;
-
-        Ok(())
+        let _ = self.set_activity(base_activity(version).state("In a server"));
     }
 
     fn set_activity(&mut self, payload: Activity) -> Result<(), Box<dyn std::error::Error>> {
-        if let Err(discord_rich_presence::error::Error::NotConnected) =
-            self.client.set_activity(payload.clone())
-        {
-            self.client.connect()?;
+        if self.client.set_activity(payload.clone()).is_err() {
+            let _ = self.client.connect();
             self.client.set_activity(payload)?;
         }
         Ok(())

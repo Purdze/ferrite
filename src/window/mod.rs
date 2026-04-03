@@ -342,8 +342,8 @@ impl App {
         if let Some(reason) = reason {
             self.menu.show_disconnect(reason);
         }
-        if let Some(presence) = &mut self.presence {
-            let _ = presence.set_in_menu(&self.version);
+        if let Some(p) = &mut self.presence {
+            p.set_in_menu(&self.version);
         }
         self.apply_cursor_grab();
     }
@@ -792,10 +792,9 @@ impl ApplicationHandler for App {
             }
         };
 
-        self.presence
-            .as_mut()
-            .and_then(|p| p.set_in_menu(&self.version).err())
-            .inspect(|e| log::warn!("Failed to set Discord presence: {e}"));
+        if let Some(p) = &mut self.presence {
+            p.set_in_menu(&self.version);
+        }
 
         self.mesh_dispatcher = Some(renderer.create_mesh_dispatcher(self.biome_climate.clone()));
         if let Some(uuid) = self.pending_skin_uuid.take() {
@@ -1055,11 +1054,9 @@ impl ApplicationHandler for App {
                                         .is_some_and(|r| r.loaded_chunk_count() > 0);
 
                                 if ready {
-                                    let _ = self
-                                        .presence
-                                        .as_mut()
-                                        .and_then(|p| p.playing_multiplayer(&self.version).ok());
-
+                                    if let Some(p) = &mut self.presence {
+                                        p.playing_multiplayer(&self.version);
+                                    }
                                     self.state = GameState::InGame;
                                     self.apply_cursor_grab();
                                     break 'redraw;
