@@ -16,8 +16,6 @@ use crate::renderer::shader;
 use crate::renderer::util;
 use crate::world::block::model::BakedModel;
 
-const VERTEX_SIZE: usize = std::mem::size_of::<ChunkVertex>();
-
 pub struct ItemRenderInfo {
     pub item_name: String,
     pub model_matrix: Mat4,
@@ -532,37 +530,8 @@ fn create_pipeline(
             .name(c"main"),
     ];
 
-    let binding = [vk::VertexInputBindingDescription {
-        binding: 0,
-        stride: VERTEX_SIZE as u32,
-        input_rate: vk::VertexInputRate::VERTEX,
-    }];
-    let attrs = [
-        vk::VertexInputAttributeDescription {
-            location: 0,
-            binding: 0,
-            format: vk::Format::R32G32B32_SFLOAT,
-            offset: 0,
-        },
-        vk::VertexInputAttributeDescription {
-            location: 1,
-            binding: 0,
-            format: vk::Format::R32G32_SFLOAT,
-            offset: 12,
-        },
-        vk::VertexInputAttributeDescription {
-            location: 2,
-            binding: 0,
-            format: vk::Format::R32_SFLOAT,
-            offset: 20,
-        },
-        vk::VertexInputAttributeDescription {
-            location: 3,
-            binding: 0,
-            format: vk::Format::R8G8B8A8_UNORM,
-            offset: 24,
-        },
-    ];
+    let binding = [ChunkVertex::binding_description()];
+    let attrs = ChunkVertex::attribute_descriptions();
 
     let vertex_input = vk::PipelineVertexInputStateCreateInfo::default()
         .vertex_binding_descriptions(&binding)

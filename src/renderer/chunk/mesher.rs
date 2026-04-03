@@ -19,6 +19,47 @@ pub struct ChunkVertex {
     pub tint: u32,
 }
 
+impl ChunkVertex {
+    pub const STRIDE: u32 = std::mem::size_of::<Self>() as u32;
+
+    pub fn binding_description() -> ash::vk::VertexInputBindingDescription {
+        ash::vk::VertexInputBindingDescription {
+            binding: 0,
+            stride: Self::STRIDE,
+            input_rate: ash::vk::VertexInputRate::VERTEX,
+        }
+    }
+
+    pub fn attribute_descriptions() -> [ash::vk::VertexInputAttributeDescription; 4] {
+        [
+            ash::vk::VertexInputAttributeDescription {
+                location: 0,
+                binding: 0,
+                format: ash::vk::Format::R32G32B32_SFLOAT,
+                offset: 0,
+            },
+            ash::vk::VertexInputAttributeDescription {
+                location: 1,
+                binding: 0,
+                format: ash::vk::Format::R32G32_SFLOAT,
+                offset: 12,
+            },
+            ash::vk::VertexInputAttributeDescription {
+                location: 2,
+                binding: 0,
+                format: ash::vk::Format::R32_SFLOAT,
+                offset: 20,
+            },
+            ash::vk::VertexInputAttributeDescription {
+                location: 3,
+                binding: 0,
+                format: ash::vk::Format::R8G8B8A8_UNORM,
+                offset: 24,
+            },
+        ]
+    }
+}
+
 pub struct ChunkMeshData {
     pub pos: ChunkPos,
     pub vertices: Vec<ChunkVertex>,
@@ -28,10 +69,17 @@ pub struct ChunkMeshData {
 const WHITE: [f32; 3] = [1.0, 1.0, 1.0];
 
 pub const fn pack_tint(rgb: [f32; 3]) -> u32 {
-    let r = (rgb[0] * 255.0 + 0.5) as u32;
-    let g = (rgb[1] * 255.0 + 0.5) as u32;
-    let b = (rgb[2] * 255.0 + 0.5) as u32;
-    r | (g << 8) | (b << 16)
+    const fn channel(v: f32) -> u32 {
+        let c = (v * 255.0 + 0.5) as i32;
+        if c < 0 {
+            0
+        } else if c > 255 {
+            255
+        } else {
+            c as u32
+        }
+    }
+    channel(rgb[0]) | (channel(rgb[1]) << 8) | (channel(rgb[2]) << 16)
 }
 
 pub const PACKED_WHITE: u32 = pack_tint([1.0, 1.0, 1.0]);
