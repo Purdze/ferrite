@@ -28,9 +28,9 @@ pub struct ChunkMeshData {
 const WHITE: [f32; 3] = [1.0, 1.0, 1.0];
 
 pub const fn pack_tint(rgb: [f32; 3]) -> u32 {
-    let r = (rgb[0] * 255.0) as u32;
-    let g = (rgb[1] * 255.0) as u32;
-    let b = (rgb[2] * 255.0) as u32;
+    let r = (rgb[0] * 255.0 + 0.5) as u32;
+    let g = (rgb[1] * 255.0 + 0.5) as u32;
+    let b = (rgb[2] * 255.0 + 0.5) as u32;
     r | (g << 8) | (b << 16)
 }
 
