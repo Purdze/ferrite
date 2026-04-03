@@ -496,6 +496,16 @@ impl App {
                     if health > 0.0 && self.dead {
                         self.dead = false;
                         self.apply_cursor_grab();
+                    } else if health <= 0.0 && !self.dead {
+                        self.dead = true;
+                        self.death_message = String::new();
+                        self.death_instant = Instant::now();
+                        self.death_confirm = false;
+                        self.respawn_sent = false;
+                        if let Some(window) = &self.window {
+                            let _ = window.set_cursor_grab(CursorGrabMode::None);
+                            window.set_cursor_visible(true);
+                        }
                     }
                 }
                 NetworkEvent::InventoryContent { items } => {
@@ -663,6 +673,7 @@ impl App {
                     self.dead = true;
                     self.death_message = message;
                     self.death_instant = Instant::now();
+                    self.death_confirm = false;
                     self.respawn_sent = false;
                     if let Some(window) = &self.window {
                         let _ = window.set_cursor_grab(CursorGrabMode::None);
