@@ -254,6 +254,7 @@ pub fn handle_game_packet(
                         is_baby: *is_baby,
                     });
                 }
+                // Entity data index 16 = player score (1.21.4 protocol)
                 if item.index == 16
                     && let azalea_entity::EntityDataValue::Int(score) = &item.value
                 {

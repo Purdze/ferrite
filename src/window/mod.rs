@@ -24,6 +24,7 @@ use crate::renderer::pipelines::entity_renderer::EntityRenderInfo;
 use crate::renderer::pipelines::menu_overlay::MenuElement;
 use crate::ui::chat::ChatState;
 use crate::ui::common::{self, WHITE};
+use crate::ui::death::{self, DeathAction};
 use crate::ui::hud;
 use crate::ui::menu::{MainMenu, MenuAction, MenuInput, PanoramaTheme};
 use crate::ui::pause::{self, PauseAction};
@@ -110,9 +111,9 @@ struct App {
     paused: bool,
     dead: bool,
     death_message: String,
-    death_ticks: u32,
+    death_instant: Instant,
     death_confirm: bool,
-    death_confirm_ticks: u32,
+    death_confirm_instant: Instant,
     respawn_sent: bool,
     inventory_open: bool,
     chat: ChatState,
@@ -221,9 +222,9 @@ impl App {
             paused: false,
             dead: false,
             death_message: String::new(),
-            death_ticks: 0,
+            death_instant: Instant::now(),
             death_confirm: false,
-            death_confirm_ticks: 0,
+            death_confirm_instant: Instant::now(),
             respawn_sent: false,
             inventory_open: false,
             chat: ChatState::new(),
@@ -661,7 +662,7 @@ impl App {
                 NetworkEvent::PlayerDied { message } => {
                     self.dead = true;
                     self.death_message = message;
-                    self.death_ticks = 0;
+                    self.death_instant = Instant::now();
                     self.respawn_sent = false;
                     if let Some(window) = &self.window {
                         let _ = window.set_cursor_grab(CursorGrabMode::None);
@@ -959,7 +960,12 @@ impl ApplicationHandler for App {
                             } else {
                                 match code {
                                     KeyCode::Escape
-                                        if self.death_confirm && self.death_confirm_ticks >= 20 =>
+                                        if self.death_confirm
+                                            && self
+                                                .death_confirm_instant
+                                                .elapsed()
+                                                .as_secs_f32()
+                                                >= 1.0 =>
                                     {
                                         self.death_confirm = false;
                                         self.send_respawn();
@@ -1320,7 +1326,7 @@ impl ApplicationHandler for App {
 
                             let mut close_inventory = false;
                             let mut pause_action = PauseAction::None;
-                            let mut death_action = crate::ui::death::DeathAction::None;
+                            let mut death_action = DeathAction::None;
 
                             if let (Some(renderer), Some(window)) =
                                 (&mut self.renderer, &self.window)
@@ -1411,25 +1417,21 @@ impl ApplicationHandler for App {
                                     let clicked =
                                         self.input.left_just_pressed() && !self.respawn_sent;
                                     death_action = if self.death_confirm {
-                                        let a = crate::ui::death::build_death_confirm(
+                                        death::build_death_confirm(
                                             &mut elements,
                                             sw,
                                             sh,
                                             cursor,
                                             clicked,
                                             gs,
-                                            self.death_confirm_ticks,
-                                        );
-                                        self.death_confirm_ticks += 1;
-                                        a
+                                            self.death_confirm_instant.elapsed().as_secs_f32()
+                                                >= 1.0,
+                                        )
                                     } else {
-                                        let ticks = if self.respawn_sent {
-                                            0
-                                        } else {
-                                            self.death_ticks
-                                        };
+                                        let buttons_enabled = !self.respawn_sent
+                                            && self.death_instant.elapsed().as_secs_f32() >= 1.0;
                                         let r = &*renderer;
-                                        let a = crate::ui::death::build_death_screen(
+                                        death::build_death_screen(
                                             &mut elements,
                                             sw,
                                             sh,
@@ -1438,11 +1440,9 @@ impl ApplicationHandler for App {
                                             gs,
                                             &self.death_message,
                                             self.player.score,
-                                            ticks,
+                                            buttons_enabled,
                                             &|t, s| r.menu_text_width(t, s),
-                                        );
-                                        self.death_ticks += 1;
-                                        a
+                                        )
                                     };
                                     self.input.clear_click_events();
                                 } else if self.paused {
@@ -1563,18 +1563,18 @@ impl ApplicationHandler for App {
                             }
 
                             match death_action {
-                                crate::ui::death::DeathAction::Respawn => {
+                                DeathAction::Respawn => {
                                     self.death_confirm = false;
                                     self.send_respawn();
                                 }
-                                crate::ui::death::DeathAction::TitleScreen => {
+                                DeathAction::TitleScreen => {
                                     self.disconnect_to_menu(None);
                                 }
-                                crate::ui::death::DeathAction::ShowConfirm => {
+                                DeathAction::ShowConfirm => {
                                     self.death_confirm = true;
-                                    self.death_confirm_ticks = 0;
+                                    self.death_confirm_instant = Instant::now();
                                 }
-                                crate::ui::death::DeathAction::None => {}
+                                DeathAction::None => {}
                             }
 
                             match pause_action {

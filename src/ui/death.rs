@@ -33,7 +33,7 @@ pub fn build_death_screen(
     gs: f32,
     message: &str,
     score: i32,
-    ticks: u32,
+    buttons_enabled: bool,
     text_width_fn: &dyn Fn(&str, f32) -> f32,
 ) -> DeathAction {
     let mut action = DeathAction::None;
@@ -41,7 +41,6 @@ pub fn build_death_screen(
     let btn_h = common::BTN_H * gs;
     let btn_w = BTN_W * gs;
     let cx = screen_w / 2.0;
-    let buttons_enabled = ticks >= 20;
 
     push_gradient(elements, screen_w, screen_h);
 
@@ -86,7 +85,7 @@ pub fn build_death_screen(
         y: 100.0 * gs,
         text: score_str.into(),
         scale: fs,
-        color: [1.0, 1.0, 0.33, 1.0],
+        color: [1.0, 1.0, 0.091, 1.0],
         centered: false,
     });
 
@@ -134,14 +133,13 @@ pub fn build_death_confirm(
     cursor: (f32, f32),
     clicked: bool,
     gs: f32,
-    ticks: u32,
+    buttons_enabled: bool,
 ) -> DeathAction {
     let mut action = DeathAction::None;
     let fs = common::FONT_SIZE * gs;
     let btn_h = common::BTN_H * gs;
     let cx = screen_w / 2.0;
     let cy = screen_h / 2.0;
-    let buttons_enabled = ticks >= 20;
 
     push_gradient(elements, screen_w, screen_h);
 
