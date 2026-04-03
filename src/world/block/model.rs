@@ -229,19 +229,24 @@ pub fn load_all_block_textures(
     let mut results = HashMap::new();
     let mut model_cache = HashMap::new();
 
-    for_each_blockstate(jar_assets_dir, asset_index, packs, |block_name, blockstate| {
-        let model_ref = extract_default_model_ref(blockstate)?;
-        let resolved = resolve_model(
-            &model_ref.model,
-            jar_assets_dir,
-            asset_index,
-            &mut model_cache,
-            packs,
-        );
-        let face_textures = build_face_textures(block_name, &resolved.textures)?;
-        results.insert(block_name.to_string(), face_textures);
-        Some(())
-    });
+    for_each_blockstate(
+        jar_assets_dir,
+        asset_index,
+        packs,
+        |block_name, blockstate| {
+            let model_ref = extract_default_model_ref(blockstate)?;
+            let resolved = resolve_model(
+                &model_ref.model,
+                jar_assets_dir,
+                asset_index,
+                &mut model_cache,
+                packs,
+            );
+            let face_textures = build_face_textures(block_name, &resolved.textures)?;
+            results.insert(block_name.to_string(), face_textures);
+            Some(())
+        },
+    );
 
     tracing::info!(
         "Loaded {} block texture mappings from vanilla assets",
@@ -263,58 +268,63 @@ pub fn bake_all_models(
     let mut model_cache = HashMap::new();
     let mut total = 0u32;
 
-    for_each_blockstate(jar_assets_dir, asset_index, packs, |block_name, blockstate| {
-        total += 1;
-        let block_tint = determine_tint(block_name);
-        let mut variants_map: HashMap<String, BakedModel> = HashMap::new();
+    for_each_blockstate(
+        jar_assets_dir,
+        asset_index,
+        packs,
+        |block_name, blockstate| {
+            total += 1;
+            let block_tint = determine_tint(block_name);
+            let mut variants_map: HashMap<String, BakedModel> = HashMap::new();
 
-        if let Some(variants) = &blockstate.variants {
-            for (variant_key, variant_entry) in variants {
-                let model_ref = variant_entry.first()?;
-                let resolved = resolve_model(
-                    &model_ref.model,
-                    jar_assets_dir,
-                    asset_index,
-                    &mut model_cache,
-                    packs,
-                );
-                if let Some(baked) =
-                    bake_resolved_model(&resolved, model_ref.x, model_ref.y, block_tint)
-                {
-                    variants_map.insert(variant_key.clone(), baked);
+            if let Some(variants) = &blockstate.variants {
+                for (variant_key, variant_entry) in variants {
+                    let model_ref = variant_entry.first()?;
+                    let resolved = resolve_model(
+                        &model_ref.model,
+                        jar_assets_dir,
+                        asset_index,
+                        &mut model_cache,
+                        packs,
+                    );
+                    if let Some(baked) =
+                        bake_resolved_model(&resolved, model_ref.x, model_ref.y, block_tint)
+                    {
+                        variants_map.insert(variant_key.clone(), baked);
+                    }
+                }
+            } else if let Some(multipart) = &blockstate.multipart {
+                let mut entries = Vec::new();
+                for case in multipart {
+                    let model_ref = case.apply.first()?;
+                    let resolved = resolve_model(
+                        &model_ref.model,
+                        jar_assets_dir,
+                        asset_index,
+                        &mut model_cache,
+                        packs,
+                    );
+                    if let Some(baked) =
+                        bake_resolved_model(&resolved, model_ref.x, model_ref.y, block_tint)
+                    {
+                        let when = parse_when_condition(&case.when);
+                        entries.push(MultipartEntry {
+                            when,
+                            quads: baked.quads,
+                        });
+                    }
+                }
+                if !entries.is_empty() {
+                    multipart_results.insert(block_name.to_string(), entries);
                 }
             }
-        } else if let Some(multipart) = &blockstate.multipart {
-            let mut entries = Vec::new();
-            for case in multipart {
-                let model_ref = case.apply.first()?;
-                let resolved = resolve_model(
-                    &model_ref.model,
-                    jar_assets_dir,
-                    asset_index,
-                    &mut model_cache,
-                    packs,
-                );
-                if let Some(baked) =
-                    bake_resolved_model(&resolved, model_ref.x, model_ref.y, block_tint)
-                {
-                    let when = parse_when_condition(&case.when);
-                    entries.push(MultipartEntry {
-                        when,
-                        quads: baked.quads,
-                    });
-                }
-            }
-            if !entries.is_empty() {
-                multipart_results.insert(block_name.to_string(), entries);
-            }
-        }
 
-        if !variants_map.is_empty() {
-            results.insert(block_name.to_string(), variants_map);
-        }
-        Some(())
-    });
+            if !variants_map.is_empty() {
+                results.insert(block_name.to_string(), variants_map);
+            }
+            Some(())
+        },
+    );
 
     let mut missing_names: Vec<String> = Vec::new();
     for_each_blockstate(jar_assets_dir, asset_index, packs, |block_name, _| {

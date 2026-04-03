@@ -81,7 +81,8 @@ impl TextureAtlas {
 
         for &name in texture_names {
             let asset_key = format!("minecraft/textures/block/{name}.png");
-            let file_path = resolve_asset_path_with_packs(jar_assets_dir, asset_index, &asset_key, packs);
+            let file_path =
+                resolve_asset_path_with_packs(jar_assets_dir, asset_index, &asset_key, packs);
             let (data, img_w, img_h) = match util::load_png(&file_path) {
                 Some(p) => p,
                 None => {

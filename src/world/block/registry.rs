@@ -4,6 +4,8 @@ use std::path::Path;
 use azalea_block::BlockState;
 use serde::{Deserialize, Serialize};
 
+pub const BLOCK_CACHE_FILE: &str = "block_cache.json";
+
 use crate::assets::AssetIndex;
 
 use super::model::{self, BakedModel};
@@ -70,7 +72,7 @@ impl BlockRegistry {
         game_dir: &Path,
         packs: Option<&crate::resource_pack::ResourcePackManager>,
     ) -> Self {
-        let cache_path = game_dir.join("block_cache.json");
+        let cache_path = game_dir.join(BLOCK_CACHE_FILE);
 
         let textures = if packs.is_none() {
             if let Some(cached) = load_cache(&cache_path) {
@@ -84,8 +86,7 @@ impl BlockRegistry {
         };
 
         let textures = textures.unwrap_or_else(|| {
-            let mut textures =
-                model::load_all_block_textures(jar_assets_dir, asset_index, packs);
+            let mut textures = model::load_all_block_textures(jar_assets_dir, asset_index, packs);
 
             textures
                 .entry("water".into())

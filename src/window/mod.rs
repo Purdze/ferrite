@@ -197,7 +197,7 @@ impl App {
             GameState::Menu
         };
 
-        let resource_packs = crate::resource_pack::ResourcePackManager::new(&game_dir);
+        let resource_packs = crate::resource_pack::ResourcePackManager::new(&data_dirs.game_dir);
         Self {
             presence,
             display_mode: DisplayMode::Windowed,
@@ -700,19 +700,18 @@ impl App {
                 } => {
                     log::info!("Resource pack push: {id} url={url} required={required}");
                     let cache_dir = self.resource_packs.server_cache_dir().to_path_buf();
-                    let hash_clone = hash.clone();
-                    let url_clone = url.clone();
-                    self.pending_pack_download =
-                        Some(std::thread::spawn(move || PackDownloadResult {
+                    self.pending_pack_download = Some(std::thread::spawn(move || {
+                        let result =
+                            crate::resource_pack::ResourcePackManager::download_server_pack(
+                                &cache_dir, &url, &hash,
+                            );
+                        PackDownloadResult {
                             id,
-                            hash: hash_clone.clone(),
+                            hash,
                             required,
-                            result: crate::resource_pack::ResourcePackManager::download_server_pack(
-                                &cache_dir,
-                                &url_clone,
-                                &hash_clone,
-                            ),
-                        }));
+                            result,
+                        }
+                    }));
                 }
                 NetworkEvent::ResourcePackPop { id } => {
                     if let Some(id) = id {
@@ -721,6 +720,7 @@ impl App {
                         self.resource_packs.clear_server_packs();
                     }
                     self.menu.active_packs = self.resource_packs.active_pack_info();
+                    self.menu.reload_assets = true;
                 }
                 NetworkEvent::Disconnected { reason } => {
                     tracing::warn!("Disconnected: {reason}");
@@ -739,6 +739,7 @@ impl App {
                 Ok(_) => {
                     self.resource_packs.apply_server_pack(dl.id, &dl.hash);
                     log::info!("Resource pack {} loaded successfully", dl.id);
+                    self.menu.reload_assets = true;
                     s_resource_pack::Action::SuccessfullyLoaded
                 }
                 Err(e) => {
@@ -1220,8 +1221,10 @@ impl ApplicationHandler for App {
                                 if self.menu.reload_assets {
                                     self.menu.reload_assets = false;
                                     if let Some(renderer) = &mut self.renderer {
-                                        renderer
-                                            .reload_assets(&self.game_dir, &self.resource_packs);
+                                        renderer.reload_assets(
+                                            &self.data_dirs.game_dir,
+                                            &self.resource_packs,
+                                        );
                                         if let Some(ref mut dispatcher) = self.mesh_dispatcher {
                                             *dispatcher = renderer.create_mesh_dispatcher(
                                                 self.biome_climate.clone(),

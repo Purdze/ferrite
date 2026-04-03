@@ -702,12 +702,16 @@ impl Renderer {
     ) {
         unsafe { self.ctx.device.device_wait_idle().unwrap() };
 
-        let cache_path = game_dir.join("pomc_block_cache.json");
+        let cache_path = game_dir.join(crate::world::block::registry::BLOCK_CACHE_FILE);
         let _ = std::fs::remove_file(&cache_path);
         log::info!("Invalidated block cache");
 
-        self.registry =
-            BlockRegistry::load(&self.assets_dir, &self.asset_index, game_dir, Some(packs));
+        self.registry = BlockRegistry::load(
+            &self.jar_assets_dir,
+            &self.asset_index,
+            game_dir,
+            Some(packs),
+        );
 
         self.atlas.destroy(&self.ctx.device, &self.ctx.allocator);
         let texture_names: std::collections::HashSet<&str> =
@@ -717,7 +721,7 @@ impl Renderer {
             self.ctx.graphics_queue,
             self.ctx.command_pool,
             &self.ctx.allocator,
-            &self.assets_dir,
+            &self.jar_assets_dir,
             &self.asset_index,
             &texture_names,
             Some(packs),
