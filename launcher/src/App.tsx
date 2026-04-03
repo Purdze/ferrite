@@ -163,7 +163,7 @@ function App() {
     try {
       await invoke("ensure_assets", { version: selectedVersion });
       setDownloadProgress(null);
-      setStatus("Launching POMC...");
+      setStatus("Launching Pomme...");
       const result = await invoke<string>("launch_game", {
         uuid: account?.uuid || null,
         server: server || null,

@@ -3325,7 +3325,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "pomc"
+name = "pomme"
 version = "0.1.0"
 dependencies = [
  "ash",

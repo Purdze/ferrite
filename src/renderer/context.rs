@@ -57,9 +57,9 @@ impl VulkanContext {
         let entry = unsafe { ash::Entry::load().expect("failed to load Vulkan") };
 
         let app_info = vk::ApplicationInfo::default()
-            .application_name(c"POMC")
+            .application_name(c"Pomme")
             .application_version(vk::make_api_version(0, 0, 1, 0))
-            .engine_name(c"POMC Engine")
+            .engine_name(c"Pomme Engine")
             .engine_version(vk::make_api_version(0, 0, 1, 0))
             .api_version(vk::make_api_version(0, 1, 3, 0));
 

@@ -34,5 +34,5 @@ What actually happened.
 ## Logs
 
 ```
-Paste relevant log output here (run with RUST_LOG=pomc=debug)
+Paste relevant log output here (run with RUST_LOG=pomme=debug)
 ```

@@ -15,16 +15,16 @@ jobs:
         include:
           - os: windows-latest
             target: x86_64-pc-windows-msvc
-            artifact: pomc.exe
-            archive: pomc-client-windows-x64.zip
+            artifact: pomme.exe
+            archive: pomme-client-windows-x64.zip
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
-            artifact: pomc
-            archive: pomc-client-linux-x64.tar.gz
+            artifact: pomme
+            archive: pomme-client-linux-x64.tar.gz
           - os: macos-latest
             target: aarch64-apple-darwin
-            artifact: pomc
-            archive: pomc-client-macos-arm64.tar.gz
+            artifact: pomme
+            archive: pomme-client-macos-arm64.tar.gz
 
     runs-on: ${{ matrix.os }}
 

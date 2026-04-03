@@ -160,7 +160,7 @@ export default function Console() {
 
   return (
     <div className="app">
-      <Titlebar name="POMC Debugger" />
+      <Titlebar name="Pomme Debugger" />
       <div className="console-holder">
         <div className="console">
           <div className="console-scroll">

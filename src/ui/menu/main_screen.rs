@@ -101,17 +101,17 @@ impl MainMenu {
         });
         cy += accent_bar_h + 14.0 * s;
 
-        let pomc_w = text_width_fn("POMC", title_size);
+        let pomme_w = text_width_fn("Pomme", title_size);
         elements.push(MenuElement::Text {
             x: btn_x,
             y: cy,
-            text: "POMC".into(),
+            text: "Pomme".into(),
             scale: title_size,
             color: [0.94, 0.96, 0.99, 0.95],
             centered: false,
         });
 
-        let sub_x = btn_x + pomc_w + 8.0 * s;
+        let sub_x = btn_x + pomme_w + 8.0 * s;
         let sub_y1 = cy + title_size - sub_size * 2.0 - 4.0 * s;
         let sub_y2 = cy + title_size - sub_size - 1.0 * s;
         let badge_t = ((anim_t - 2.0) / 0.3).clamp(0.0, 1.0);
@@ -365,7 +365,7 @@ impl MainMenu {
             let drop_x = anchor_x + icon_size - drop_w;
             let drop_y = icon_area_y - 2.0 * s;
             let themes: [(&str, PanoramaTheme); 2] = [
-                ("POMC", PanoramaTheme::Pomc),
+                ("Pomme", PanoramaTheme::Pomc),
                 ("Default", PanoramaTheme::Default),
             ];
             let total_h = themes.len() as f32 * drop_style.item_h;
@@ -436,7 +436,7 @@ impl MainMenu {
             color: footer_col,
             centered: false,
         });
-        let copy = "POMC early dev";
+        let copy = "Pomme early dev";
         let copy_w = text_width_fn(copy, footer_size);
         elements.push(MenuElement::Text {
             x: screen_w - footer_pad - copy_w,

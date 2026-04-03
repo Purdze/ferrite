@@ -3,9 +3,9 @@ use std::sync::LazyLock;
 
 static DATA_DIR: LazyLock<PathBuf> = {
     LazyLock::new(|| {
-        directories::ProjectDirs::from("", "", ".pomc")
+        directories::ProjectDirs::from("", "", ".pomme")
             .map(|d| d.data_dir().to_path_buf())
-            .unwrap_or_else(|| PathBuf::from(".pomc"))
+            .unwrap_or_else(|| PathBuf::from(".pomme"))
     })
 };
 
@@ -21,7 +21,7 @@ fn ensure_file(path: &Path, default: &str) {
 
 pub fn ensure_dirs() {
     let _ = std::fs::create_dir_all(assets_dir());
-    let _ = std::fs::create_dir_all(pomc_assets_dir());
+    let _ = std::fs::create_dir_all(pomme_assets_dir());
     let _ = std::fs::create_dir_all(versions_dir());
     let _ = std::fs::create_dir_all(installations_dir());
 
@@ -43,8 +43,8 @@ pub fn objects_dir() -> PathBuf {
     assets_dir().join("objects")
 }
 
-pub fn pomc_assets_dir() -> PathBuf {
-    data_dir().join("pomc_assets")
+pub fn pomme_assets_dir() -> PathBuf {
+    data_dir().join("pomme_assets")
 }
 
 pub fn versions_dir() -> PathBuf {

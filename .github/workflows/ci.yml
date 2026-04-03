@@ -37,8 +37,8 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-artifact@v7
         with:
-          name: pomc-client-windows
-          path: target/release/pomc.exe
+          name: pomme-client-windows
+          path: target/release/pomme.exe
 
   client-linux:
     runs-on: ubuntu-latest
@@ -63,8 +63,8 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-artifact@v7
         with:
-          name: pomc-client-linux
-          path: target/release/pomc
+          name: pomme-client-linux
+          path: target/release/pomme
 
   client-macos:
     runs-on: macos-latest
@@ -84,8 +84,8 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-artifact@v7
         with:
-          name: pomc-client-macos
-          path: target/release/pomc
+          name: pomme-client-macos
+          path: target/release/pomme
 
   launcher-backend:
     runs-on: windows-latest
@@ -179,5 +179,5 @@ jobs:
       - name: Upload launcher installer
         uses: actions/upload-artifact@v7
         with:
-          name: pomc-launcher-windows
+          name: pomme-launcher-windows
           path: launcher/src-tauri/target/release/bundle/nsis/*.exe

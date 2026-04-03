@@ -1,14 +1,14 @@
-# Contributing to POMC
+# Contributing to Pomme
 
-Thanks for your interest in contributing to POMC!
+Thanks for your interest in contributing to Pomme!
 
 ## Getting Started
 
 1. Fork the repository
 2. Clone your fork and set up the development environment:
    ```bash
-   git clone https://github.com/<your-username>/POMC.git
-   cd POMC
+   git clone https://github.com/<your-username>/Pomme.git
+   cd Pomme
    rustup override set nightly
    ```
 3. Extract vanilla 1.21.11 assets into `reference/assets/`:

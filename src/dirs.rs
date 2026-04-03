@@ -5,7 +5,7 @@ use directories::ProjectDirs;
 pub struct DataDirs {
     pub indexes_dir: PathBuf,
     pub objects_dir: PathBuf,
-    pub pomc_assets_dir: PathBuf,
+    pub pomme_assets_dir: PathBuf,
     pub jar_assets_dir: PathBuf,
     pub game_dir: PathBuf,
 }
@@ -23,7 +23,7 @@ impl DataDirs {
             .map(PathBuf::from)
             .unwrap_or_else(|| root_dir.join("assets"));
 
-        let pomc_assets_dir = root_dir.join("pomc-assets");
+        let pomme_assets_dir = root_dir.join("pomme-assets");
 
         let game_dir = game_dir
             .map(PathBuf::from)
@@ -42,7 +42,7 @@ impl DataDirs {
             indexes_dir,
             objects_dir,
             jar_assets_dir,
-            pomc_assets_dir,
+            pomme_assets_dir,
             game_dir,
         }
     }
@@ -55,7 +55,7 @@ impl DataDirs {
         let DataDirs {
             indexes_dir,
             objects_dir,
-            pomc_assets_dir: _,
+            pomme_assets_dir: _,
             jar_assets_dir,
             game_dir: _,
         } = self;
@@ -73,7 +73,7 @@ impl DataDirs {
 }
 
 fn data_dir() -> PathBuf {
-    ProjectDirs::from("", "", ".pomc")
+    ProjectDirs::from("", "", ".pomme")
         .map(|dirs| dirs.data_dir().to_path_buf())
-        .unwrap_or_else(|| Path::new(".pomc").to_path_buf())
+        .unwrap_or_else(|| Path::new(".pomme").to_path_buf())
 }

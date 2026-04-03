@@ -1,7 +1,7 @@
 {
-  "productName": "POMC Launcher",
+  "productName": "Pomme Launcher",
   "version": "0.1.0",
-  "identifier": "com.pomc.launcher",
+  "identifier": "com.pomme.launcher",
   "build": {
     "frontendDist": "../dist",
     "devUrl": "http://localhost:1420",

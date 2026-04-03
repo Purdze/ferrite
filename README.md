@@ -1,14 +1,14 @@
 <p align="center">
-  <h1 align="center">POMC</h1>
+  <h1 align="center">Pomme</h1>
   <p align="center">A high-performance Minecraft client written in Rust</p>
   <p align="center">
-    <a href="https://discord.gg/ucBA55bHPR">Discord</a> · <a href="https://github.com/Purdze/POMC/issues">Issues</a> · <a href="https://github.com/Purdze/POMC/releases">Releases</a>
+    <a href="https://discord.gg/ucBA55bHPR">Discord</a> · <a href="https://github.com/Purdze/Pomme/issues">Issues</a> · <a href="https://github.com/Purdze/Pomme/releases">Releases</a>
   </p>
 </p>
 
 ---
 
-POMC is a from-scratch Minecraft: Java Edition client built entirely in Rust. It connects to vanilla servers, renders the world through Vulkan, and handles physics, networking, and UI without any Mojang code. The goal is a lightweight, performant alternative to the official Java client.
+Pomme is a from-scratch Minecraft: Java Edition client built entirely in Rust. It connects to vanilla servers, renders the world through Vulkan, and handles physics, networking, and UI without any Mojang code. The goal is a lightweight, performant alternative to the official Java client.
 
 <img width="957" height="535" alt="launcher" src="https://github.com/user-attachments/assets/5d7240d3-80fb-49fb-9eb4-7e497f61a603" />
 
@@ -24,7 +24,7 @@ POMC is a from-scratch Minecraft: Java Edition client built entirely in Rust. It
 ## Architecture
 
 ```
-pomc/             Minecraft client (Rust, Vulkan)
+pomme/             Minecraft client (Rust, Vulkan)
 launcher/         Launcher app (Tauri, React, TypeScript)
 ```
 

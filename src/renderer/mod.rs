@@ -320,7 +320,7 @@ impl Renderer {
             MenuElement::Text {
                 x: cx,
                 y: cy - title_size - 20.0 * gs,
-                text: "POMC".into(),
+                text: "Pomme".into(),
                 scale: title_size,
                 color: [0.86, 0.92, 1.0, 0.95],
                 centered: true,

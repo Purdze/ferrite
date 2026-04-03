@@ -1,7 +1,7 @@
 use clap::Parser;
 
 #[derive(Parser, Debug)]
-#[command(name = "pomc", about = "Minecraft client")]
+#[command(name = "pomme", about = "Minecraft client")]
 pub struct LaunchArgs {
     #[arg(long)]
     pub version: Option<String>,

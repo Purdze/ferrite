@@ -55,7 +55,7 @@ fn unix_now() -> u64 {
         .as_secs()
 }
 
-const KEYRING_SERVICE: &str = "pomc-launcher";
+const KEYRING_SERVICE: &str = "pomme-launcher";
 const KEYRING_ACCOUNTS: &str = "minecraft-accounts";
 const KEYRING_REFRESH: &str = "minecraft-refresh-tokens";
 

@@ -66,7 +66,7 @@ export default function Navbar({ startAddAccount, switchAccount, removeAccount }
           <HiCube />
         </div>
         <div className="brand-text">
-          <span className="brand-name">POMC</span>
+          <span className="brand-name">POMME</span>
           <span className="brand-sub">LAUNCHER</span>
         </div>
         <span className="brand-version">v0.1.0</span>

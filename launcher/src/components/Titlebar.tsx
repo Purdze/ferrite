@@ -1,7 +1,7 @@
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { HiCube, HiMinus, HiSquare2Stack, HiXMark } from "react-icons/hi2";
 
-export default function Titlebar({ name }: { name?: string } = { name: "POMC Launcher" }) {
+export default function Titlebar({ name }: { name?: string } = { name: "Pomme Launcher" }) {
   const appWindow = getCurrentWindow();
 
   const minimize = () => {

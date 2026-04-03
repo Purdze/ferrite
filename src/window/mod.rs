@@ -757,7 +757,7 @@ impl ApplicationHandler for App {
         }
 
         let window_attrs = Window::default_attributes()
-            .with_title("POMC")
+            .with_title("Pomme")
             .with_inner_size(winit::dpi::LogicalSize::new(854, 480))
             .with_visible(false);
 
@@ -1003,9 +1003,10 @@ impl ApplicationHandler for App {
                                                 PanoramaTheme::Default => {
                                                     self.data_dirs.jar_assets_dir.clone()
                                                 }
-                                                PanoramaTheme::Pomc => {
-                                                    self.data_dirs.pomc_assets_dir.join("panoramas")
-                                                }
+                                                PanoramaTheme::Pomc => self
+                                                    .data_dirs
+                                                    .pomme_assets_dir
+                                                    .join("panoramas"),
                                             };
                                             renderer
                                                 .reload_panorama(&panorama_dir, &self.asset_index);

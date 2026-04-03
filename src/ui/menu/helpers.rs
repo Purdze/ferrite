@@ -407,7 +407,7 @@ pub(super) fn push_bottom_text(
         centered: false,
     });
 
-    let name = "POMC";
+    let name = "Pomme";
     let tag = "early dev";
     let tag_size = fs * 0.65;
     let gap = 2.0 * gs;

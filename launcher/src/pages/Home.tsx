@@ -29,7 +29,7 @@ export default function Homepage({ handleLaunch, openPatchNote }: HomepageProps)
       <div className="hero-banner">
         <div className="hero-overlay" />
         <div className="hero-content">
-          <h1 className="hero-title">POMC</h1>
+          <h1 className="hero-title">POMME</h1>
           <p className="hero-subtitle">RUST-NATIVE MINECRAFT CLIENT</p>
         </div>
       </div>

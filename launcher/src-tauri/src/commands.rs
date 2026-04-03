@@ -266,7 +266,7 @@ pub async fn launch_game(
     let token: String = (0..32)
         .map(|_| format!("{:02x}", rand::random::<u8>()))
         .collect();
-    let token_path = std::env::temp_dir().join("pomc_launch_token");
+    let token_path = std::env::temp_dir().join("pomme_launch_token");
     std::fs::write(&token_path, &token).map_err(|e| e.to_string())?;
 
     let mut cmd = tokio::process::Command::new(&exe);
@@ -278,7 +278,7 @@ pub async fn launch_game(
         match app.webview_windows().get("console") {
             None => {
                 WebviewWindowBuilder::new(&app, "console", WebviewUrl::App("console".into()))
-                    .title("POMC Debugger")
+                    .title("Pomme Debugger")
                     .decorations(false)
                     .build()
                     .unwrap();
@@ -391,10 +391,10 @@ pub async fn get_client_logs(
 
 fn find_client_binary() -> Result<std::path::PathBuf, String> {
     #[cfg(target_family = "windows")]
-    const EXENAME: &str = "pomc.exe";
+    const EXENAME: &str = "pomme.exe";
 
     #[cfg(target_family = "unix")]
-    const EXENAME: &str = "pomc";
+    const EXENAME: &str = "pomme";
 
     if let Ok(exe) = std::env::current_exe()
         && let Some(dir) = exe.parent()
@@ -418,7 +418,7 @@ fn find_client_binary() -> Result<std::path::PathBuf, String> {
         }
     }
 
-    Err("POMC client not found. It will be bundled in future releases.".into())
+    Err("Pomme client not found. It will be bundled in future releases.".into())
 }
 
 #[tauri::command]

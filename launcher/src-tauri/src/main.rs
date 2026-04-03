@@ -52,5 +52,5 @@ fn main() {
             commands::save_servers,
         ])
         .run(tauri::generate_context!())
-        .expect("failed to run POMC launcher");
+        .expect("failed to run Pomme launcher");
 }

@@ -238,7 +238,7 @@ fn build_debug_overlay(elements: &mut Vec<MenuElement>, info: &DebugInfo<'_>, gs
     let pitch_deg = info.pitch.to_degrees();
 
     let mut left_lines: Vec<String> = vec![
-        format!("POMC ({}fps)", info.fps),
+        format!("Pomme ({}fps)", info.fps),
         String::new(),
         format!("XYZ: {:.3} / {:.5} / {:.3}", pos.x, pos.y, pos.z),
         format!("Block: {} {} {}", bx, by, bz),
