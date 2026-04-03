@@ -49,7 +49,11 @@ function App() {
         const body = await invoke<string>("get_patch_content", {
           contentPath: note.content_path,
         });
-        setSelectedNote({ title: note.title, body });
+        setSelectedNote({
+          title: note.title,
+          body,
+          image_url: note.image_url,
+        });
         setPage("news");
       } catch (e) {
         console.error("Failed to fetch content:", e);

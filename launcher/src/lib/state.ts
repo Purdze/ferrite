@@ -97,6 +97,7 @@ const useAppState = () => {
   const [selectedNote, setSelectedNote] = useState<{
     title: string;
     body: string;
+    image_url: string;
   } | null>(null);
 
   const launcherSettings = useLauncherSettings();
