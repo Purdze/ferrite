@@ -85,6 +85,8 @@ pub struct ChunkMeshData {
     pub pos: ChunkPos,
     pub vertices: Vec<ChunkVertex>,
     pub indices: Vec<u32>,
+    pub translucent_vertices: Vec<ChunkVertex>,
+    pub translucent_indices: Vec<u32>,
 }
 
 #[derive(Clone, Copy, Debug, Default)]
@@ -762,6 +764,8 @@ fn mesh_chunk_snapshot(
 ) -> ChunkMeshData {
     let mut vertices = Vec::new();
     let mut indices = Vec::new();
+    let mut translucent_vertices = Vec::new();
+    let mut translucent_indices = Vec::new();
     let mut logged_missing: std::collections::HashSet<String> = std::collections::HashSet::new();
 
     let step = 1i32 << lod;
@@ -822,18 +826,16 @@ fn mesh_chunk_snapshot(
 
                 let block_pos = [bx as f32, by as f32, bz as f32];
 
+                let is_translucent = matches!(kind, BlockKind::Translucent | BlockKind::Water);
+                let (verts, idxs) = if is_translucent {
+                    (&mut translucent_vertices, &mut translucent_indices)
+                } else {
+                    (&mut vertices, &mut indices)
+                };
+
                 if lod > 0 {
                     emit_lod_cube(
-                        &mut vertices,
-                        &mut indices,
-                        block_pos,
-                        state,
-                        snapshot,
-                        registry,
-                        uv_map,
-                        bx,
-                        by,
-                        bz,
+                        verts, idxs, block_pos, state, snapshot, registry, uv_map, bx, by, bz,
                         step,
                     );
                 } else if let BlockKind::Water | BlockKind::Lava = kind {
@@ -843,55 +845,19 @@ fn mesh_chunk_snapshot(
                         "water"
                     };
                     emit_fluid(
-                        &mut vertices,
-                        &mut indices,
-                        block_pos,
-                        fluid,
-                        snapshot,
-                        registry,
-                        uv_map,
-                        bx,
-                        by,
-                        bz,
+                        verts, idxs, block_pos, fluid, snapshot, registry, uv_map, bx, by, bz,
                     );
                 } else if let Some(baked) = registry.get_baked_model(state) {
                     emit_baked_model(
-                        &mut vertices,
-                        &mut indices,
-                        block_pos,
-                        baked,
-                        snapshot,
-                        registry,
-                        uv_map,
-                        bx,
-                        by,
-                        bz,
+                        verts, idxs, block_pos, baked, snapshot, registry, uv_map, bx, by, bz,
                     );
                 } else if let Some(quads) = registry.get_multipart_quads(state) {
                     emit_multipart(
-                        &mut vertices,
-                        &mut indices,
-                        block_pos,
-                        &quads,
-                        snapshot,
-                        registry,
-                        uv_map,
-                        bx,
-                        by,
-                        bz,
+                        verts, idxs, block_pos, &quads, snapshot, registry, uv_map, bx, by, bz,
                     );
                 } else if let Some(textures) = registry.get_textures(state) {
                     emit_cube_faces(
-                        &mut vertices,
-                        &mut indices,
-                        block_pos,
-                        textures,
-                        snapshot,
-                        registry,
-                        uv_map,
-                        bx,
-                        by,
-                        bz,
+                        verts, idxs, block_pos, textures, snapshot, registry, uv_map, bx, by, bz,
                     );
                 } else {
                     let block: Box<dyn azalea_block::BlockTrait> = state.into();
@@ -899,16 +865,7 @@ fn mesh_chunk_snapshot(
                     if logged_missing.insert(id.clone()) {
                         tracing::warn!("Missing model: {id}");
                     }
-                    emit_missing_cube(
-                        &mut vertices,
-                        &mut indices,
-                        block_pos,
-                        snapshot,
-                        registry,
-                        bx,
-                        by,
-                        bz,
-                    );
+                    emit_missing_cube(verts, idxs, block_pos, snapshot, registry, bx, by, bz);
                 }
                 by += step;
             }
@@ -921,6 +878,8 @@ fn mesh_chunk_snapshot(
         pos,
         vertices,
         indices,
+        translucent_vertices,
+        translucent_indices,
     }
 }
 
