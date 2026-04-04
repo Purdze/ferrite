@@ -140,6 +140,15 @@ struct App {
     server_simulation_distance: u32,
     pending_skin_uuid: Option<uuid::Uuid>,
     item_entity_store: ItemEntityStore,
+    resource_packs: crate::resource_pack::ResourcePackManager,
+    pending_pack_download: Option<std::thread::JoinHandle<PackDownloadResult>>,
+}
+
+struct PackDownloadResult {
+    id: uuid::Uuid,
+    hash: String,
+    required: bool,
+    result: Result<std::path::PathBuf, crate::resource_pack::PackError>,
 }
 
 struct FpsCounter {
@@ -191,6 +200,7 @@ impl App {
             GameState::Menu
         };
 
+        let resource_packs = crate::resource_pack::ResourcePackManager::new(&data_dirs.game_dir);
         Self {
             presence,
             display_mode: DisplayMode::Windowed,
@@ -248,6 +258,8 @@ impl App {
             last_sent_horizontal_collision: false,
             was_sprinting: false,
             position_send_counter: 0,
+            resource_packs,
+            pending_pack_download: None,
         }
     }
 
@@ -382,7 +394,7 @@ impl App {
         if let Some(renderer) = &mut self.renderer {
             renderer.clear_chunk_meshes();
             self.mesh_dispatcher =
-                Some(renderer.create_mesh_dispatcher(self.biome_climate.clone()));
+                Some(renderer.create_mesh_dispatcher(self.biome_climate.clone(), None));
         }
         if let Some(reason) = reason {
             self.menu.show_disconnect(reason);
@@ -430,7 +442,7 @@ impl App {
                     if let Some(renderer) = &mut self.renderer {
                         renderer.clear_chunk_meshes();
                         self.mesh_dispatcher =
-                            Some(renderer.create_mesh_dispatcher(self.biome_climate.clone()));
+                            Some(renderer.create_mesh_dispatcher(self.biome_climate.clone(), None));
                     }
                 }
                 NetworkEvent::ChunkLoaded {
@@ -686,11 +698,70 @@ impl App {
                         window.set_cursor_visible(true);
                     }
                 }
+                NetworkEvent::ResourcePackPush {
+                    id,
+                    url,
+                    hash,
+                    required,
+                } => {
+                    tracing::info!("Resource pack push: {id} url={url} required={required}");
+                    let cache_dir = self.resource_packs.server_cache_dir().to_path_buf();
+                    self.pending_pack_download = Some(std::thread::spawn(move || {
+                        let result =
+                            crate::resource_pack::ResourcePackManager::download_server_pack(
+                                &cache_dir, &url, &hash,
+                            );
+                        PackDownloadResult {
+                            id,
+                            hash,
+                            required,
+                            result,
+                        }
+                    }));
+                }
+                NetworkEvent::ResourcePackPop { id } => {
+                    if let Some(id) = id {
+                        self.resource_packs.remove_server_pack(&id);
+                    } else {
+                        self.resource_packs.clear_server_packs();
+                    }
+                    self.menu.active_packs = self.resource_packs.active_pack_info();
+                    self.menu.reload_assets = true;
+                }
                 NetworkEvent::Disconnected { reason } => {
                     tracing::warn!("Disconnected: {reason}");
                     disconnect_reason = Some(reason);
                 }
             }
+        }
+
+        if let Some(handle) = &self.pending_pack_download
+            && handle.is_finished()
+        {
+            let handle = self.pending_pack_download.take().unwrap();
+            let dl = handle.join().expect("pack download thread panicked");
+            use azalea_protocol::packets::game::s_resource_pack;
+            let action = match &dl.result {
+                Ok(_) => {
+                    self.resource_packs.apply_server_pack(dl.id, &dl.hash);
+                    tracing::info!("Resource pack {} loaded successfully", dl.id);
+                    self.menu.reload_assets = true;
+                    s_resource_pack::Action::SuccessfullyLoaded
+                }
+                Err(e) => {
+                    tracing::error!("Resource pack {} failed: {e}", dl.id);
+                    if dl.required {
+                        disconnect_reason = Some(format!("Required resource pack failed: {e}"));
+                    }
+                    s_resource_pack::Action::FailedDownload
+                }
+            };
+            if let Some(sender) = &self.packet_sender {
+                sender.send(ServerboundGamePacket::ResourcePack(
+                    s_resource_pack::ServerboundResourcePack { id: dl.id, action },
+                ));
+            }
+            self.menu.active_packs = self.resource_packs.active_pack_info();
         }
 
         if let Some(reason) = disconnect_reason {
@@ -933,7 +1004,8 @@ impl ApplicationHandler for App {
             p.set_in_menu(&self.version);
         }
 
-        self.mesh_dispatcher = Some(renderer.create_mesh_dispatcher(self.biome_climate.clone()));
+        self.mesh_dispatcher =
+            Some(renderer.create_mesh_dispatcher(self.biome_climate.clone(), None));
         if let Some(uuid) = self.pending_skin_uuid.take() {
             renderer.load_player_skin(&uuid, &self.tokio_rt);
         }
@@ -1150,6 +1222,44 @@ impl ApplicationHandler for App {
                                 if self.menu.display_mode != self.display_mode {
                                     self.display_mode = self.menu.display_mode;
                                     self.apply_display_mode();
+                                }
+
+                                if self.menu.rescan_packs {
+                                    self.menu.rescan_packs = false;
+                                    self.resource_packs.scan_local_packs();
+                                    self.menu.available_packs =
+                                        self.resource_packs.available_local_packs().to_vec();
+                                    self.menu.active_packs = self.resource_packs.active_pack_info();
+                                }
+
+                                if let Some((name, enable)) = self.menu.pack_toggle.take() {
+                                    if enable {
+                                        self.resource_packs.enable_local_pack(&name);
+                                    } else {
+                                        self.resource_packs.disable_local_pack(&name);
+                                    }
+                                    self.menu.active_packs = self.resource_packs.active_pack_info();
+                                    self.menu.available_packs =
+                                        self.resource_packs.available_local_packs().to_vec();
+                                }
+
+                                if self.menu.reload_assets {
+                                    self.menu.reload_assets = false;
+                                    if let Some(renderer) = &mut self.renderer {
+                                        renderer.reload_assets(
+                                            &self.data_dirs.game_dir,
+                                            &self.resource_packs,
+                                        );
+                                        if let Some(ref mut dispatcher) = self.mesh_dispatcher {
+                                            *dispatcher = renderer.create_mesh_dispatcher(
+                                                self.biome_climate.clone(),
+                                                Some(&self.resource_packs),
+                                            );
+                                            for pos in self.chunk_store.loaded_positions() {
+                                                dispatcher.enqueue(&self.chunk_store, pos, 0);
+                                            }
+                                        }
+                                    }
                                 }
 
                                 if result.clicked_button
