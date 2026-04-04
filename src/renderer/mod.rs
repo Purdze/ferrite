@@ -550,6 +550,58 @@ impl Renderer {
         self.camera.pitch = pitch;
     }
 
+    pub fn update_third_person_distance(
+        &mut self,
+        eye_pos: glam::Vec3,
+        chunks: &crate::world::chunk::ChunkStore,
+    ) {
+        if self.camera.mode == camera::CameraMode::FirstPerson {
+            return;
+        }
+        let max = camera::THIRD_PERSON_DISTANCE;
+        let fwd = self.camera.forward_vec();
+        let dir = if self.camera.mode == camera::CameraMode::ThirdPersonFront {
+            fwd
+        } else {
+            -fwd
+        };
+        let mut dist = max;
+
+        let m = 0.4;
+        let corners = [
+            glam::Vec3::new(m, m, m),
+            glam::Vec3::new(m, m, -m),
+            glam::Vec3::new(m, -m, m),
+            glam::Vec3::new(m, -m, -m),
+            glam::Vec3::new(-m, m, m),
+            glam::Vec3::new(-m, m, -m),
+            glam::Vec3::new(-m, -m, m),
+            glam::Vec3::new(-m, -m, -m),
+        ];
+
+        let step = 0.2;
+        let mut t = step;
+        while t <= max {
+            let p = eye_pos + dir * t;
+            let hit = corners.iter().any(|off| {
+                let check = p + *off;
+                let state = chunks.get_block_state(
+                    check.x.floor() as i32,
+                    check.y.floor() as i32,
+                    check.z.floor() as i32,
+                );
+                self.registry.is_opaque_full_cube(state)
+            });
+            if hit {
+                dist = (t - 0.3).max(0.5);
+                break;
+            }
+            t += step;
+        }
+
+        self.camera.third_person_dist = dist.max(0.5);
+    }
+
     pub fn update_fov(&mut self, modifier: f32) {
         self.camera.update_fov_modifier(modifier);
     }
@@ -564,6 +616,14 @@ impl Renderer {
 
     pub fn camera_pitch(&self) -> f32 {
         self.camera.pitch
+    }
+
+    pub fn cycle_camera_mode(&mut self) {
+        self.camera.mode = self.camera.mode.cycle();
+    }
+
+    pub fn is_first_person(&self) -> bool {
+        self.camera.mode == camera::CameraMode::FirstPerson
     }
 
     pub fn gpu_name(&self) -> &str {
@@ -979,14 +1039,16 @@ impl Renderer {
                         .device
                         .cmd_clear_attachments(cmd, &[clear_attachment], &[clear_rect]);
 
-                    let aspect = sw / sh.max(1.0);
-                    self.hand_pipeline.update_and_draw(
-                        &self.ctx.device,
-                        cmd,
-                        frame,
-                        aspect,
-                        *swing_progress,
-                    );
+                    if self.camera.mode == camera::CameraMode::FirstPerson {
+                        let aspect = sw / sh.max(1.0);
+                        self.hand_pipeline.update_and_draw(
+                            &self.ctx.device,
+                            cmd,
+                            frame,
+                            aspect,
+                            *swing_progress,
+                        );
+                    }
 
                     self.menu_pipeline
                         .draw(&self.ctx.device, cmd, sw, sh, overlay);
