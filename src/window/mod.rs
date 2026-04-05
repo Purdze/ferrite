@@ -120,6 +120,7 @@ struct App {
     respawn_sent: bool,
     inventory_open: bool,
     chat: ChatState,
+    tab_list: crate::player::tab_list::TabList,
     panorama_scroll: f32,
     interaction: InteractionState,
     sky_state: crate::renderer::SkyState,
@@ -246,6 +247,7 @@ impl App {
             respawn_sent: false,
             inventory_open: false,
             chat: ChatState::new(),
+            tab_list: crate::player::tab_list::TabList::new(),
             panorama_scroll: 0.0,
             interaction: InteractionState::new(),
             sky_state: crate::renderer::SkyState::default_day(),
@@ -735,6 +737,16 @@ impl App {
                 NetworkEvent::Disconnected { reason } => {
                     tracing::warn!("Disconnected: {reason}");
                     disconnect_reason = Some(reason);
+                    self.tab_list.clear();
+                }
+                NetworkEvent::PlayerInfoUpdate { actions, entries } => {
+                    self.tab_list.apply_update(&actions, &entries);
+                }
+                NetworkEvent::PlayerInfoRemove { uuids } => {
+                    self.tab_list.remove(&uuids);
+                }
+                NetworkEvent::TabListHeaderFooter { header, footer } => {
+                    self.tab_list.set_header_footer(header, footer);
                 }
             }
         }
@@ -1555,6 +1567,22 @@ impl ApplicationHandler for App {
                                     debug.as_ref(),
                                     self.menu.gui_scale_setting,
                                 );
+
+                                if self.input.tab_held()
+                                    && !self.paused
+                                    && !self.inventory_open
+                                    && !self.chat.is_open()
+                                    && !self.dead
+                                {
+                                    let r = &*renderer;
+                                    crate::ui::player_tab::build_player_tab_overlay(
+                                        &mut elements,
+                                        sw,
+                                        &self.tab_list,
+                                        gs,
+                                        &|t, s| r.menu_text_width(t, s),
+                                    );
+                                }
 
                                 if let Some(ref mut bench) = self.benchmark {
                                     let entity_count = self.entity_store.living.len() as u32;

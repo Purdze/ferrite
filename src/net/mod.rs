@@ -155,4 +155,15 @@ pub enum NetworkEvent {
     Disconnected {
         reason: String,
     },
+    PlayerInfoUpdate {
+        actions: crate::player::tab_list::PlayerInfoActions,
+        entries: Vec<crate::player::tab_list::PlayerInfoEntry>,
+    },
+    PlayerInfoRemove {
+        uuids: Vec<uuid::Uuid>,
+    },
+    TabListHeaderFooter {
+        header: String,
+        footer: String,
+    },
 }
