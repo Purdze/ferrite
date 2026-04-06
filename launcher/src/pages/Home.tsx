@@ -1,3 +1,4 @@
+import { BiSolidDownload } from "react-icons/bi";
 import { HiChevronDown, HiCube, HiPlay } from "react-icons/hi2";
 import SkinRunner from "../components/SkinRunner";
 import { useDropdown } from "../lib/hooks";
@@ -11,15 +12,16 @@ interface HomepageProps {
 
 export default function Homepage({ handleLaunch, openPatchNote }: HomepageProps) {
   const {
-    launching,
+    launchingStatus,
     installations,
-    selectedVersion,
     activeInstall,
     setActiveInstall,
     news,
     status,
+    downloadedVersions,
     downloadProgress,
     skinUrl,
+    setOpenedDialog,
   } = useAppStateContext();
 
   const { ref: versionDropdownRef, ...versionDropdown } = useDropdown();
@@ -36,19 +38,44 @@ export default function Homepage({ handleLaunch, openPatchNote }: HomepageProps)
 
       <div className="launch-bar">
         <button
-          className={`play-button ${launching ? "launching" : ""}`}
+          className={`play-button ${
+            launchingStatus === "installing" || launchingStatus === "checking_assets"
+              ? "installing"
+              : launchingStatus === "launching"
+                ? "launching"
+                : ""
+          }`}
           onClick={handleLaunch}
-          disabled={launching}
+          disabled={launchingStatus !== null}
         >
-          <HiPlay className="play-icon" />
-          <span className="play-text">{launching ? "LAUNCHING..." : "PLAY"}</span>
+          {launchingStatus === null && downloadedVersions.has(activeInstall?.version ?? "") ? (
+            <HiPlay className="play-icon" />
+          ) : (
+            <BiSolidDownload className="download-icon" />
+          )}
+          <span className="play-text">
+            {launchingStatus === null
+              ? downloadedVersions.has(activeInstall?.version ?? "")
+                ? "PLAY"
+                : "INSTALL"
+              : launchingStatus === "checking_assets"
+                ? "Checking assets..."
+                : launchingStatus === "installing"
+                  ? "Installing..."
+                  : "Launching..."}
+          </span>
         </button>
       </div>
 
       <div className="version-badge-wrapper" ref={versionDropdownRef}>
         <button className="version-badge" onClick={versionDropdown.toggle}>
           <HiCube className="version-badge-icon" />
-          <span>{selectedVersion}</span>
+          <span className="version-item-id">
+            {activeInstall?.name || "No installation selected"}
+          </span>
+          <span className="version-item-type" hidden={!activeInstall}>
+            {activeInstall?.version || ""}
+          </span>
           <HiChevronDown
             className={`version-badge-arrow ${versionDropdown.isOpen ? "open" : ""}`}
           />
@@ -56,19 +83,31 @@ export default function Homepage({ handleLaunch, openPatchNote }: HomepageProps)
         {versionDropdown.isOpen && (
           <div className="version-dropdown">
             <div className="version-list">
-              {installations.map((inst) => (
+              {installations.length === 0 ? (
                 <button
-                  key={inst.id}
-                  className={`version-item ${inst.id === activeInstall ? "active" : ""}`}
+                  className={`version-item`}
                   onClick={() => {
-                    setActiveInstall(inst.id);
                     versionDropdown.close();
+                    setOpenedDialog({ name: "installation", props: { type: "new" } });
                   }}
                 >
-                  <span className="version-item-id">{inst.name}</span>
-                  <span className="version-item-type">{inst.version}</span>
+                  <span className="version-item-id">Create a new installation</span>
                 </button>
-              ))}
+              ) : (
+                installations.map((inst) => (
+                  <button
+                    key={inst.id}
+                    className={`version-item ${inst.id === activeInstall?.id ? "active" : ""}`}
+                    onClick={() => {
+                      setActiveInstall(inst);
+                      versionDropdown.close();
+                    }}
+                  >
+                    <span className="version-item-id">{inst.name}</span>
+                    <span className="version-item-type">{inst.version}</span>
+                  </button>
+                ))
+              )}
             </div>
           </div>
         )}
