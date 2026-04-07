@@ -381,7 +381,7 @@ impl Renderer {
             let wait_value = ctx
                 .timeline_value
                 .get()
-                .saturating_sub(MAX_FRAMES_IN_FLIGHT as u64);
+                .saturating_sub(MAX_FRAMES_IN_FLIGHT as u64 - 1);
             if wait_value > 0 {
                 let sems = [ctx.timeline_semaphore];
                 let vals = [wait_value];
@@ -979,7 +979,7 @@ impl Renderer {
             .ctx
             .timeline_value
             .get()
-            .saturating_sub(MAX_FRAMES_IN_FLIGHT as u64);
+            .saturating_sub(MAX_FRAMES_IN_FLIGHT as u64 - 1);
         if wait_value > 0 {
             let sems = [self.ctx.timeline_semaphore];
             let vals = [wait_value];
