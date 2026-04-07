@@ -38,6 +38,8 @@ pub struct ItemEntityPipeline {
     atlas_view: vk::ImageView,
     atlas_sampler: vk::Sampler,
     meshes: HashMap<String, MeshEntry>,
+    tex_descriptor_pool: vk::DescriptorPool,
+    tex_descriptor_set: vk::DescriptorSet,
 }
 
 impl ItemEntityPipeline {
@@ -48,7 +50,7 @@ impl ItemEntityPipeline {
         allocator: &Arc<Mutex<Allocator>>,
         atlas: &TextureAtlas,
     ) -> Self {
-        let camera_layout = util::create_descriptor_set_layout(
+        let camera_layout = util::create_push_descriptor_set_layout(
             device,
             vk::DescriptorType::UNIFORM_BUFFER,
             vk::ShaderStageFlags::VERTEX,
@@ -88,6 +90,34 @@ impl ItemEntityPipeline {
             camera_allocations.push(Some(alloc));
         }
 
+        let pool_sizes = [vk::DescriptorPoolSize {
+            ty: vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
+            descriptor_count: 1,
+        }];
+        let pool_info = vk::DescriptorPoolCreateInfo::default()
+            .max_sets(1)
+            .pool_sizes(&pool_sizes);
+        let tex_descriptor_pool = unsafe { device.create_descriptor_pool(&pool_info, None) }
+            .expect("failed to create item entity tex descriptor pool");
+
+        let alloc_info = vk::DescriptorSetAllocateInfo::default()
+            .descriptor_pool(tex_descriptor_pool)
+            .set_layouts(std::slice::from_ref(&atlas_layout));
+        let tex_descriptor_set = unsafe { device.allocate_descriptor_sets(&alloc_info) }
+            .expect("failed to allocate item entity tex descriptor set")[0];
+
+        let img_info = [vk::DescriptorImageInfo {
+            sampler: atlas.sampler,
+            image_view: atlas.view,
+            image_layout: vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
+        }];
+        let write = vk::WriteDescriptorSet::default()
+            .dst_set(tex_descriptor_set)
+            .dst_binding(0)
+            .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+            .image_info(&img_info);
+        unsafe { device.update_descriptor_sets(&[write], &[]) };
+
         Self {
             pipeline,
             pipeline_layout,
@@ -98,6 +128,8 @@ impl ItemEntityPipeline {
             atlas_view: atlas.view,
             atlas_sampler: atlas.sampler,
             meshes: HashMap::new(),
+            tex_descriptor_pool,
+            tex_descriptor_set,
         }
     }
 
@@ -208,16 +240,6 @@ impl ItemEntityPipeline {
             .descriptor_type(vk::DescriptorType::UNIFORM_BUFFER)
             .buffer_info(&cam_buf_info);
 
-        let atlas_img_info = [vk::DescriptorImageInfo {
-            sampler: self.atlas_sampler,
-            image_view: self.atlas_view,
-            image_layout: vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
-        }];
-        let atlas_write = vk::WriteDescriptorSet::default()
-            .dst_binding(0)
-            .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
-            .image_info(&atlas_img_info);
-
         unsafe {
             device.cmd_bind_pipeline(cmd, vk::PipelineBindPoint::GRAPHICS, self.pipeline);
             push_desc.cmd_push_descriptor_set(
@@ -227,12 +249,13 @@ impl ItemEntityPipeline {
                 0,
                 &[cam_write],
             );
-            push_desc.cmd_push_descriptor_set(
+            device.cmd_bind_descriptor_sets(
                 cmd,
                 vk::PipelineBindPoint::GRAPHICS,
                 self.pipeline_layout,
                 1,
-                &[atlas_write],
+                &[self.tex_descriptor_set],
+                &[],
             );
         }
 
@@ -279,6 +302,7 @@ impl ItemEntityPipeline {
             }
         }
         unsafe {
+            device.destroy_descriptor_pool(self.tex_descriptor_pool, None);
             device.destroy_pipeline(self.pipeline, None);
             device.destroy_pipeline_layout(self.pipeline_layout, None);
             device.destroy_descriptor_set_layout(self.camera_layout, None);

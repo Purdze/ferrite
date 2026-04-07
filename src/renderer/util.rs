@@ -268,6 +268,33 @@ pub fn create_descriptor_set_layout(
     descriptor_type: vk::DescriptorType,
     stage_flags: vk::ShaderStageFlags,
 ) -> vk::DescriptorSetLayout {
+    create_descriptor_set_layout_flags(
+        device,
+        descriptor_type,
+        stage_flags,
+        vk::DescriptorSetLayoutCreateFlags::empty(),
+    )
+}
+
+pub fn create_push_descriptor_set_layout(
+    device: &ash::Device,
+    descriptor_type: vk::DescriptorType,
+    stage_flags: vk::ShaderStageFlags,
+) -> vk::DescriptorSetLayout {
+    create_descriptor_set_layout_flags(
+        device,
+        descriptor_type,
+        stage_flags,
+        vk::DescriptorSetLayoutCreateFlags::PUSH_DESCRIPTOR_KHR,
+    )
+}
+
+fn create_descriptor_set_layout_flags(
+    device: &ash::Device,
+    descriptor_type: vk::DescriptorType,
+    stage_flags: vk::ShaderStageFlags,
+    flags: vk::DescriptorSetLayoutCreateFlags,
+) -> vk::DescriptorSetLayout {
     let bindings = [vk::DescriptorSetLayoutBinding {
         binding: 0,
         descriptor_type,
@@ -277,7 +304,7 @@ pub fn create_descriptor_set_layout(
     }];
     let info = vk::DescriptorSetLayoutCreateInfo::default()
         .bindings(&bindings)
-        .flags(vk::DescriptorSetLayoutCreateFlags::PUSH_DESCRIPTOR_KHR);
+        .flags(flags);
     unsafe { device.create_descriptor_set_layout(&info, None) }
         .expect("failed to create descriptor set layout")
 }

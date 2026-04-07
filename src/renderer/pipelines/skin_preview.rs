@@ -44,6 +44,8 @@ pub struct SkinPreviewPipeline {
     skin_view: vk::ImageView,
     skin_sampler: vk::Sampler,
     swing_start: Option<std::time::Instant>,
+    tex_descriptor_pool: vk::DescriptorPool,
+    tex_descriptor_set: vk::DescriptorSet,
 }
 
 impl SkinPreviewPipeline {
@@ -55,7 +57,7 @@ impl SkinPreviewPipeline {
         skin_view: vk::ImageView,
         skin_sampler: vk::Sampler,
     ) -> Self {
-        let mvp_layout = util::create_descriptor_set_layout(
+        let mvp_layout = util::create_push_descriptor_set_layout(
             device,
             vk::DescriptorType::UNIFORM_BUFFER,
             vk::ShaderStageFlags::VERTEX,
@@ -139,6 +141,34 @@ impl SkinPreviewPipeline {
             "skin_head",
         );
 
+        let pool_sizes = [vk::DescriptorPoolSize {
+            ty: vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
+            descriptor_count: 1,
+        }];
+        let pool_info = vk::DescriptorPoolCreateInfo::default()
+            .max_sets(1)
+            .pool_sizes(&pool_sizes);
+        let tex_descriptor_pool = unsafe { device.create_descriptor_pool(&pool_info, None) }
+            .expect("failed to create skin preview tex descriptor pool");
+
+        let alloc_info = vk::DescriptorSetAllocateInfo::default()
+            .descriptor_pool(tex_descriptor_pool)
+            .set_layouts(std::slice::from_ref(&tex_layout));
+        let tex_descriptor_set = unsafe { device.allocate_descriptor_sets(&alloc_info) }
+            .expect("failed to allocate skin preview tex descriptor set")[0];
+
+        let img_info = [vk::DescriptorImageInfo {
+            sampler: skin_sampler,
+            image_view: skin_view,
+            image_layout: vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
+        }];
+        let write = vk::WriteDescriptorSet::default()
+            .dst_set(tex_descriptor_set)
+            .dst_binding(0)
+            .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+            .image_info(&img_info);
+        unsafe { device.update_descriptor_sets(&[write], &[]) };
+
         Self {
             pipeline,
             pipeline_layout,
@@ -162,6 +192,8 @@ impl SkinPreviewPipeline {
             head_buffer,
             head_allocation,
             head_count: head_verts.len() as u32,
+            tex_descriptor_pool,
+            tex_descriptor_set,
         }
     }
 
@@ -241,16 +273,6 @@ impl SkinPreviewPipeline {
         write_uniform(&self.head_mvp_allocations[frame], &head_mvp);
         write_uniform(&self.arm_mvp_allocations[frame], &arm_mvp);
 
-        let skin_img_info = [vk::DescriptorImageInfo {
-            sampler: self.skin_sampler,
-            image_view: self.skin_view,
-            image_layout: vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
-        }];
-        let tex_write = vk::WriteDescriptorSet::default()
-            .dst_binding(0)
-            .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
-            .image_info(&skin_img_info);
-
         let push_mvp = |push_desc: &ash::khr::push_descriptor::Device, buf: vk::Buffer| {
             let buffer_info = [vk::DescriptorBufferInfo {
                 buffer: buf,
@@ -275,12 +297,13 @@ impl SkinPreviewPipeline {
         unsafe {
             device.cmd_bind_pipeline(cmd, vk::PipelineBindPoint::GRAPHICS, self.pipeline);
 
-            push_desc.cmd_push_descriptor_set(
+            device.cmd_bind_descriptor_sets(
                 cmd,
                 vk::PipelineBindPoint::GRAPHICS,
                 self.pipeline_layout,
                 1,
-                &[tex_write.clone()],
+                &[self.tex_descriptor_set],
+                &[],
             );
 
             push_mvp(push_desc, self.mvp_buffers[frame]);
@@ -346,6 +369,7 @@ impl SkinPreviewPipeline {
         drop(alloc);
 
         unsafe {
+            device.destroy_descriptor_pool(self.tex_descriptor_pool, None);
             device.destroy_pipeline(self.pipeline, None);
             device.destroy_pipeline_layout(self.pipeline_layout, None);
             device.destroy_descriptor_set_layout(self.mvp_layout, None);

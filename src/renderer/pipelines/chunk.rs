@@ -18,6 +18,8 @@ pub struct ChunkPipeline {
     camera_allocations: Vec<Allocation>,
     pub atlas_view: vk::ImageView,
     pub atlas_sampler: vk::Sampler,
+    tex_descriptor_pool: vk::DescriptorPool,
+    tex_descriptor_set: vk::DescriptorSet,
 }
 
 impl ChunkPipeline {
@@ -28,7 +30,7 @@ impl ChunkPipeline {
         allocator: &Arc<Mutex<Allocator>>,
         atlas: &TextureAtlas,
     ) -> Self {
-        let camera_layout = util::create_descriptor_set_layout(
+        let camera_layout = util::create_push_descriptor_set_layout(
             device,
             vk::DescriptorType::UNIFORM_BUFFER,
             vk::ShaderStageFlags::VERTEX,
@@ -60,6 +62,34 @@ impl ChunkPipeline {
             camera_allocations.push(alloc);
         }
 
+        let pool_sizes = [vk::DescriptorPoolSize {
+            ty: vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
+            descriptor_count: 1,
+        }];
+        let pool_info = vk::DescriptorPoolCreateInfo::default()
+            .max_sets(1)
+            .pool_sizes(&pool_sizes);
+        let tex_descriptor_pool = unsafe { device.create_descriptor_pool(&pool_info, None) }
+            .expect("failed to create chunk tex descriptor pool");
+
+        let alloc_info = vk::DescriptorSetAllocateInfo::default()
+            .descriptor_pool(tex_descriptor_pool)
+            .set_layouts(std::slice::from_ref(&atlas_layout));
+        let tex_descriptor_set = unsafe { device.allocate_descriptor_sets(&alloc_info) }
+            .expect("failed to allocate chunk tex descriptor set")[0];
+
+        let image_info = [vk::DescriptorImageInfo {
+            sampler: atlas.sampler,
+            image_view: atlas.view,
+            image_layout: vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
+        }];
+        let write = vk::WriteDescriptorSet::default()
+            .dst_set(tex_descriptor_set)
+            .dst_binding(0)
+            .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+            .image_info(&image_info);
+        unsafe { device.update_descriptor_sets(&[write], &[]) };
+
         Self {
             pipeline,
             pipeline_layout,
@@ -69,6 +99,8 @@ impl ChunkPipeline {
             camera_allocations,
             atlas_view: atlas.view,
             atlas_sampler: atlas.sampler,
+            tex_descriptor_pool,
+            tex_descriptor_set,
         }
     }
 
@@ -78,9 +110,21 @@ impl ChunkPipeline {
             .copy_from_slice(bytes);
     }
 
-    pub fn rebind_atlas(&mut self, _device: &ash::Device, atlas: &TextureAtlas) {
+    pub fn rebind_atlas(&mut self, device: &ash::Device, atlas: &TextureAtlas) {
         self.atlas_view = atlas.view;
         self.atlas_sampler = atlas.sampler;
+
+        let image_info = [vk::DescriptorImageInfo {
+            sampler: atlas.sampler,
+            image_view: atlas.view,
+            image_layout: vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
+        }];
+        let write = vk::WriteDescriptorSet::default()
+            .dst_set(self.tex_descriptor_set)
+            .dst_binding(0)
+            .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+            .image_info(&image_info);
+        unsafe { device.update_descriptor_sets(&[write], &[]) };
     }
 
     pub fn bind(
@@ -100,16 +144,6 @@ impl ChunkPipeline {
             .descriptor_type(vk::DescriptorType::UNIFORM_BUFFER)
             .buffer_info(&buffer_info);
 
-        let image_info = [vk::DescriptorImageInfo {
-            sampler: self.atlas_sampler,
-            image_view: self.atlas_view,
-            image_layout: vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
-        }];
-        let atlas_write = vk::WriteDescriptorSet::default()
-            .dst_binding(0)
-            .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
-            .image_info(&image_info);
-
         unsafe {
             device.cmd_bind_pipeline(cmd, vk::PipelineBindPoint::GRAPHICS, self.pipeline);
             push_desc.cmd_push_descriptor_set(
@@ -119,12 +153,13 @@ impl ChunkPipeline {
                 0,
                 &[camera_write],
             );
-            push_desc.cmd_push_descriptor_set(
+            device.cmd_bind_descriptor_sets(
                 cmd,
                 vk::PipelineBindPoint::GRAPHICS,
                 self.pipeline_layout,
                 1,
-                &[atlas_write],
+                &[self.tex_descriptor_set],
+                &[],
             );
         }
     }
@@ -142,6 +177,7 @@ impl ChunkPipeline {
         drop(alloc);
 
         unsafe {
+            device.destroy_descriptor_pool(self.tex_descriptor_pool, None);
             device.destroy_pipeline(self.pipeline, None);
             device.destroy_pipeline_layout(self.pipeline_layout, None);
             device.destroy_descriptor_set_layout(self.descriptor_set_layout_camera, None);

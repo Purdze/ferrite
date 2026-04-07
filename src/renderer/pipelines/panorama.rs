@@ -25,6 +25,8 @@ pub struct PanoramaPipeline {
     staging_buffer: vk::Buffer,
     staging_allocation: Option<Allocation>,
     has_cubemap: bool,
+    tex_descriptor_pool: vk::DescriptorPool,
+    tex_descriptor_set: vk::DescriptorSet,
 }
 
 impl PanoramaPipeline {
@@ -38,7 +40,7 @@ impl PanoramaPipeline {
         jar_assets_dir: &std::path::Path,
         asset_index: &Option<AssetIndex>,
     ) -> Self {
-        let params_layout = util::create_descriptor_set_layout(
+        let params_layout = util::create_push_descriptor_set_layout(
             device,
             vk::DescriptorType::UNIFORM_BUFFER,
             vk::ShaderStageFlags::FRAGMENT,
@@ -76,6 +78,34 @@ impl PanoramaPipeline {
             asset_index,
         );
 
+        let pool_sizes = [vk::DescriptorPoolSize {
+            ty: vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
+            descriptor_count: 1,
+        }];
+        let pool_info = vk::DescriptorPoolCreateInfo::default()
+            .max_sets(1)
+            .pool_sizes(&pool_sizes);
+        let tex_descriptor_pool = unsafe { device.create_descriptor_pool(&pool_info, None) }
+            .expect("failed to create panorama tex descriptor pool");
+
+        let alloc_info = vk::DescriptorSetAllocateInfo::default()
+            .descriptor_pool(tex_descriptor_pool)
+            .set_layouts(std::slice::from_ref(&cube_layout));
+        let tex_descriptor_set = unsafe { device.allocate_descriptor_sets(&alloc_info) }
+            .expect("failed to allocate panorama tex descriptor set")[0];
+
+        let img_info = [vk::DescriptorImageInfo {
+            sampler: cube_sampler,
+            image_view: cube_view,
+            image_layout: vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
+        }];
+        let write = vk::WriteDescriptorSet::default()
+            .dst_set(tex_descriptor_set)
+            .dst_binding(0)
+            .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+            .image_info(&img_info);
+        unsafe { device.update_descriptor_sets(&[write], &[]) };
+
         Self {
             pipeline,
             pipeline_layout,
@@ -90,6 +120,8 @@ impl PanoramaPipeline {
             staging_buffer,
             staging_allocation: Some(staging_alloc_mem),
             has_cubemap,
+            tex_descriptor_pool,
+            tex_descriptor_set,
         }
     }
 
@@ -124,16 +156,6 @@ impl PanoramaPipeline {
             .descriptor_type(vk::DescriptorType::UNIFORM_BUFFER)
             .buffer_info(&buffer_info);
 
-        let image_info = [vk::DescriptorImageInfo {
-            sampler: self.cube_sampler,
-            image_view: self.cube_view,
-            image_layout: vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
-        }];
-        let cube_write = vk::WriteDescriptorSet::default()
-            .dst_binding(0)
-            .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
-            .image_info(&image_info);
-
         unsafe {
             device.cmd_bind_pipeline(cmd, vk::PipelineBindPoint::GRAPHICS, self.pipeline);
             push_desc.cmd_push_descriptor_set(
@@ -143,12 +165,13 @@ impl PanoramaPipeline {
                 0,
                 &[params_write],
             );
-            push_desc.cmd_push_descriptor_set(
+            device.cmd_bind_descriptor_sets(
                 cmd,
                 vk::PipelineBindPoint::GRAPHICS,
                 self.pipeline_layout,
                 1,
-                &[cube_write],
+                &[self.tex_descriptor_set],
+                &[],
             );
             device.cmd_draw(cmd, 3, 1, 0, 0);
         }
@@ -213,6 +236,18 @@ impl PanoramaPipeline {
         self.staging_buffer = staging_buffer;
         self.staging_allocation = Some(staging_alloc);
         self.has_cubemap = has_cubemap;
+
+        let img_info = [vk::DescriptorImageInfo {
+            sampler: self.cube_sampler,
+            image_view: self.cube_view,
+            image_layout: vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
+        }];
+        let write = vk::WriteDescriptorSet::default()
+            .dst_set(self.tex_descriptor_set)
+            .dst_binding(0)
+            .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+            .image_info(&img_info);
+        unsafe { device.update_descriptor_sets(&[write], &[]) };
     }
 
     pub fn destroy(&mut self, device: &ash::Device, allocator: &Arc<Mutex<Allocator>>) {
@@ -240,6 +275,7 @@ impl PanoramaPipeline {
         drop(alloc);
 
         unsafe {
+            device.destroy_descriptor_pool(self.tex_descriptor_pool, None);
             device.destroy_pipeline(self.pipeline, None);
             device.destroy_pipeline_layout(self.pipeline_layout, None);
             device.destroy_descriptor_set_layout(self.params_layout, None);
