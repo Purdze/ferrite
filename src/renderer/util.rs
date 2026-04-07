@@ -363,6 +363,8 @@ pub fn transition_image_layout(
         .src_access_mask(src_access)
         .dst_stage_mask(dst_stage)
         .dst_access_mask(dst_access)
+        .src_queue_family_index(vk::QUEUE_FAMILY_IGNORED)
+        .dst_queue_family_index(vk::QUEUE_FAMILY_IGNORED)
         .subresource_range(vk::ImageSubresourceRange {
             aspect_mask: aspect,
             base_mip_level: 0,
