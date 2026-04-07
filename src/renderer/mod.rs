@@ -313,7 +313,6 @@ impl Renderer {
         progress: f32,
         status: &str,
     ) -> Result<(), RendererError> {
-        let fence = ctx.in_flight_fences[0];
         let image_available = ctx.image_available[0];
         let render_finished = ctx.render_finished[0];
         let cmd = ctx.command_buffers[0];
@@ -363,7 +362,18 @@ impl Renderer {
         ];
 
         unsafe {
-            ctx.device.wait_for_fences(&[fence], true, u64::MAX)?;
+            let wait_value = ctx
+                .timeline_value
+                .get()
+                .saturating_sub(MAX_FRAMES_IN_FLIGHT as u64);
+            if wait_value > 0 {
+                let sems = [ctx.timeline_semaphore];
+                let vals = [wait_value];
+                let wait_info = vk::SemaphoreWaitInfo::default()
+                    .semaphores(&sems)
+                    .values(&vals);
+                ctx.device.wait_semaphores(&wait_info, u64::MAX)?;
+            }
 
             let image_index = match ctx.swapchain_loader.acquire_next_image(
                 swapchain.swapchain,
@@ -374,8 +384,6 @@ impl Renderer {
                 Ok((idx, _)) => idx,
                 Err(_) => return Ok(()),
             };
-
-            ctx.device.reset_fences(&[fence])?;
             ctx.device
                 .reset_command_buffer(cmd, vk::CommandBufferResetFlags::empty())?;
 
@@ -430,24 +438,32 @@ impl Renderer {
             ctx.device.cmd_end_render_pass(cmd);
             ctx.device.end_command_buffer(cmd)?;
 
-            let wait_semaphores = [image_available];
+            ctx.timeline_value.set(ctx.timeline_value.get() + 1);
+            let wait_sems = [image_available];
             let wait_stages = [vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT];
-            let signal_semaphores = [render_finished];
+            let signal_sems = [render_finished, ctx.timeline_semaphore];
+            let signal_values = [0u64, ctx.timeline_value.get()];
+            let wait_values = [0u64];
             let cmd_buffers = [cmd];
+            let mut timeline_info = vk::TimelineSemaphoreSubmitInfo::default()
+                .signal_semaphore_values(&signal_values)
+                .wait_semaphore_values(&wait_values);
 
             let submit_info = vk::SubmitInfo::default()
-                .wait_semaphores(&wait_semaphores)
+                .wait_semaphores(&wait_sems)
                 .wait_dst_stage_mask(&wait_stages)
                 .command_buffers(&cmd_buffers)
-                .signal_semaphores(&signal_semaphores);
+                .signal_semaphores(&signal_sems)
+                .push_next(&mut timeline_info);
 
             ctx.device
-                .queue_submit(ctx.graphics_queue, &[submit_info], fence)?;
+                .queue_submit(ctx.graphics_queue, &[submit_info], vk::Fence::null())?;
 
+            let present_sems = [render_finished];
             let swapchains = [swapchain.swapchain];
             let image_indices = [image_index];
             let present_info = vk::PresentInfoKHR::default()
-                .wait_semaphores(&signal_semaphores)
+                .wait_semaphores(&present_sems)
                 .swapchains(&swapchains)
                 .image_indices(&image_indices);
 
@@ -455,7 +471,12 @@ impl Renderer {
                 .swapchain_loader
                 .queue_present(ctx.present_queue, &present_info);
 
-            ctx.device.wait_for_fences(&[fence], true, u64::MAX)?;
+            let timeline_sems = [ctx.timeline_semaphore];
+            let timeline_vals = [ctx.timeline_value.get()];
+            let wait_info = vk::SemaphoreWaitInfo::default()
+                .semaphores(&timeline_sems)
+                .values(&timeline_vals);
+            ctx.device.wait_semaphores(&wait_info, u64::MAX)?;
         }
 
         Ok(())
@@ -647,11 +668,15 @@ impl Renderer {
     }
 
     pub fn wait_for_all_frames(&self) {
-        unsafe {
-            let _ = self
-                .ctx
-                .device
-                .wait_for_fences(&self.ctx.in_flight_fences, true, u64::MAX);
+        if self.ctx.timeline_value.get() > 0 {
+            let sems = [self.ctx.timeline_semaphore];
+            let vals = [self.ctx.timeline_value.get()];
+            let wait_info = vk::SemaphoreWaitInfo::default()
+                .semaphores(&sems)
+                .values(&vals);
+            unsafe {
+                let _ = self.ctx.device.wait_semaphores(&wait_info, u64::MAX);
+            }
         }
     }
 
@@ -893,14 +918,25 @@ impl Renderer {
         }
 
         let frame = self.ctx.frame_index;
-        let fence = self.ctx.in_flight_fences[frame];
         let image_available = self.ctx.image_available[frame];
         let render_finished = self.ctx.render_finished[frame];
         let cmd = self.ctx.command_buffers[frame];
 
         let t_fence = std::time::Instant::now();
-        unsafe {
-            self.ctx.device.wait_for_fences(&[fence], true, u64::MAX)?;
+        let wait_value = self
+            .ctx
+            .timeline_value
+            .get()
+            .saturating_sub(MAX_FRAMES_IN_FLIGHT as u64);
+        if wait_value > 0 {
+            let sems = [self.ctx.timeline_semaphore];
+            let vals = [wait_value];
+            let wait_info = vk::SemaphoreWaitInfo::default()
+                .semaphores(&sems)
+                .values(&vals);
+            unsafe {
+                self.ctx.device.wait_semaphores(&wait_info, u64::MAX)?;
+            }
         }
         let fence_ms = t_fence.elapsed().as_secs_f32() * 1000.0;
 
@@ -937,7 +973,6 @@ impl Renderer {
         }
 
         unsafe {
-            self.ctx.device.reset_fences(&[fence])?;
             self.ctx
                 .device
                 .reset_command_buffer(cmd, vk::CommandBufferResetFlags::empty())?;
@@ -1174,25 +1209,37 @@ impl Renderer {
 
             self.ctx.device.end_command_buffer(cmd)?;
 
+            self.ctx
+                .timeline_value
+                .set(self.ctx.timeline_value.get() + 1);
             let wait_semaphores = [image_available];
             let wait_stages = [vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT];
-            let signal_semaphores = [render_finished];
+            let signal_semaphores = [render_finished, self.ctx.timeline_semaphore];
+            let signal_values = [0u64, self.ctx.timeline_value.get()];
+            let wait_values = [0u64];
             let cmd_buffers = [cmd];
+            let mut timeline_info = vk::TimelineSemaphoreSubmitInfo::default()
+                .signal_semaphore_values(&signal_values)
+                .wait_semaphore_values(&wait_values);
 
             let submit_info = vk::SubmitInfo::default()
                 .wait_semaphores(&wait_semaphores)
                 .wait_dst_stage_mask(&wait_stages)
                 .command_buffers(&cmd_buffers)
-                .signal_semaphores(&signal_semaphores);
+                .signal_semaphores(&signal_semaphores)
+                .push_next(&mut timeline_info);
 
-            self.ctx
-                .device
-                .queue_submit(self.ctx.graphics_queue, &[submit_info], fence)?;
+            self.ctx.device.queue_submit(
+                self.ctx.graphics_queue,
+                &[submit_info],
+                vk::Fence::null(),
+            )?;
 
+            let present_sems = [render_finished];
             let swapchains = [self.swapchain.swapchain];
             let image_indices = [image_index];
             let present_info = vk::PresentInfoKHR::default()
-                .wait_semaphores(&signal_semaphores)
+                .wait_semaphores(&present_sems)
                 .swapchains(&swapchains)
                 .image_indices(&image_indices);
 
