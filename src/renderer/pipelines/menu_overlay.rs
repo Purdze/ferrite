@@ -391,7 +391,6 @@ impl MenuOverlayPipeline {
         let tex_descriptor_set = unsafe { device.allocate_descriptor_sets(&alloc_info) }
             .expect("failed to allocate menu overlay tex descriptor set")[0];
 
-        // Write initial descriptors for all 6 texture bindings
         let font_img = [vk::DescriptorImageInfo {
             sampler: font_sampler,
             image_view: font_view,
@@ -412,7 +411,6 @@ impl MenuOverlayPipeline {
             image_view: mc_font_view,
             image_layout: vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
         }];
-        // blur_view/blur_sampler are initialized to font_view/font_sampler
         let blur_img = [vk::DescriptorImageInfo {
             sampler: font_sampler,
             image_view: font_view,
@@ -922,70 +920,6 @@ impl MenuOverlayPipeline {
             .dst_binding(0)
             .descriptor_type(vk::DescriptorType::UNIFORM_BUFFER)
             .buffer_info(&globals_buf_info);
-
-        let font_img_info = [vk::DescriptorImageInfo {
-            sampler: self.font_sampler,
-            image_view: self.font_view,
-            image_layout: vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
-        }];
-        let sprite_img_info = [vk::DescriptorImageInfo {
-            sampler: self.sprite_sampler,
-            image_view: self.sprite_view,
-            image_layout: vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
-        }];
-        let item_img_info = [vk::DescriptorImageInfo {
-            sampler: self.item_sampler,
-            image_view: self.item_view,
-            image_layout: vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
-        }];
-        let mc_font_img_info = [vk::DescriptorImageInfo {
-            sampler: self.mc_font_sampler,
-            image_view: self.mc_font_view,
-            image_layout: vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
-        }];
-        let blur_img_info = [vk::DescriptorImageInfo {
-            sampler: self.blur_sampler,
-            image_view: self.blur_view,
-            image_layout: vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
-        }];
-        let favicon_img_info = [vk::DescriptorImageInfo {
-            sampler: self.favicon_sampler,
-            image_view: self.favicon_view,
-            image_layout: vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
-        }];
-
-        let tex_writes = [
-            vk::WriteDescriptorSet::default()
-                .dst_set(self.tex_descriptor_set)
-                .dst_binding(0)
-                .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
-                .image_info(&font_img_info),
-            vk::WriteDescriptorSet::default()
-                .dst_set(self.tex_descriptor_set)
-                .dst_binding(1)
-                .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
-                .image_info(&sprite_img_info),
-            vk::WriteDescriptorSet::default()
-                .dst_set(self.tex_descriptor_set)
-                .dst_binding(2)
-                .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
-                .image_info(&item_img_info),
-            vk::WriteDescriptorSet::default()
-                .dst_set(self.tex_descriptor_set)
-                .dst_binding(3)
-                .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
-                .image_info(&mc_font_img_info),
-            vk::WriteDescriptorSet::default()
-                .dst_set(self.tex_descriptor_set)
-                .dst_binding(4)
-                .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
-                .image_info(&blur_img_info),
-            vk::WriteDescriptorSet::default()
-                .dst_set(self.tex_descriptor_set)
-                .dst_binding(5)
-                .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
-                .image_info(&favicon_img_info),
-        ];
 
         unsafe {
             device.cmd_bind_pipeline(cmd, vk::PipelineBindPoint::GRAPHICS, self.pipeline);

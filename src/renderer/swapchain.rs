@@ -130,10 +130,6 @@ impl SwapchainState {
         })
     }
 
-    pub fn color_format(&self) -> vk::Format {
-        self.format.format
-    }
-
     pub fn depth_format(&self) -> vk::Format {
         DEPTH_FORMAT
     }

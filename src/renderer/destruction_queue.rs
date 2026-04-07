@@ -5,6 +5,7 @@ use gpu_allocator::vulkan::{Allocation, Allocator};
 
 use super::MAX_FRAMES_IN_FLIGHT;
 
+#[allow(dead_code)]
 pub enum DeferredDestroy {
     Buffer(vk::Buffer, Allocation),
     ImageAndView(vk::Image, vk::ImageView, Allocation),
@@ -27,6 +28,7 @@ impl DestructionQueue {
         }
     }
 
+    #[allow(dead_code)]
     pub fn push(&mut self, item: DeferredDestroy) {
         self.queues[self.current].push(item);
     }

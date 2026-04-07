@@ -151,7 +151,6 @@ impl EntityRenderer {
 
         let defs = mob_definitions();
 
-        // Count total texture descriptor sets needed (adult + optional baby per mob)
         let total_tex_sets: u32 = defs
             .iter()
             .map(|d| 1 + if d.baby_model.is_some() { 1u32 } else { 0 })
