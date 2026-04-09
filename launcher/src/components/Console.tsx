@@ -1,11 +1,12 @@
-import { listen } from "@tauri-apps/api/event";
 import { AnsiHtml } from "fancy-ansi/react";
 import { useEffect, useRef, useState } from "react";
 import { HiClipboardCopy } from "react-icons/hi";
 import { HiXMark } from "react-icons/hi2";
-import { commands } from "../bindings";
-import "../styles.css";
+import { commands, events } from "../bindings";
 import Titlebar from "./Titlebar";
+
+import { assertNever } from "../lib/helpers";
+import "../styles.css";
 
 const getLogs = async (): Promise<string[]> => {
   const res = await commands.getClientLogs();
@@ -15,11 +16,6 @@ const getLogs = async (): Promise<string[]> => {
   console.error("Error while getting client logs: ", res.error);
   return [];
 };
-
-interface ConsoleMessage {
-  type: "message" | "reset";
-  val?: string;
-}
 
 interface Filter {
   info_enabled: boolean;
@@ -95,24 +91,22 @@ export default function Console() {
 
       setLogs(initialLogs);
 
-      const unlistenFn = await listen<ConsoleMessage>("console_message", (event) => {
+      const unlistenFn = await events.consoleMessageEvent.listen((event) => {
         let recv = event.payload;
         switch (recv.type) {
           case "message":
-            setLogs((prevLogs) => {
-              const updatedLogs = [...prevLogs, recv.val as string];
+            setLogs((prev) => {
+              const updated = [...prev, recv.val];
               const maxLogs = 10_000;
-              if (updatedLogs.length > maxLogs) {
-                return updatedLogs.slice(1);
-              }
-              return updatedLogs;
+              if (updated.length > maxLogs) return updated.slice(1);
+              return updated;
             });
             break;
           case "reset":
             setLogs([]);
             break;
           default:
-            console.error(`Received bad event type '${recv.type}'.`, recv);
+            assertNever(recv);
         }
       });
 

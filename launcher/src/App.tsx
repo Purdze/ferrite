@@ -1,11 +1,9 @@
-import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useCallback, useEffect, useRef } from "react";
 
-import { commands } from "./bindings";
+import { commands, events } from "./bindings";
 import { PatchNote } from "./bindings/pomme_launcher/commands";
 import { useAppStateContext } from "./lib/state";
-import { DownloadProgress } from "./lib/types";
 
 import Navbar from "./components/Navbar";
 import Titlebar from "./components/Titlebar";
@@ -101,7 +99,7 @@ function App() {
   }, []);
 
   useEffect(() => {
-    const unlisten = listen<DownloadProgress>("download-progress", (event) => {
+    const unlisten = events.downloadProgressEvent.listen((event) => {
       setDownloadProgress(event.payload);
     });
     return () => {
@@ -198,11 +196,7 @@ function App() {
       return;
     }
 
-    const unlisten = await listen<{
-      code: number | null;
-      signal: number | null;
-      last_line: string | null;
-    }>("game_exited", (event) => {
+    const unlisten = await events.gameExitedEvent.listen((event) => {
       const { code, signal, last_line } = event.payload;
       const SIGNAL_NAMES: Record<number, string> = {
         4: "SIGILL",

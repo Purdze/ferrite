@@ -4,11 +4,13 @@
 
 import type * as pomme_launcher$auth from "./pomme_launcher/auth";
 import type * as pomme_launcher$commands from "./pomme_launcher/commands";
+import type * as pomme_launcher$downloader from "./pomme_launcher/downloader";
 import type * as pomme_launcher$installations from "./pomme_launcher/installations";
 import type * as pomme_launcher$ping from "./pomme_launcher/ping";
 import type * as pomme_launcher$settings from "./pomme_launcher/settings";
 
 import { invoke as __TAURI_INVOKE } from "@tauri-apps/api/core";
+import * as __TAURI_EVENT from "@tauri-apps/api/event";
 
 /** Commands */
 export const commands = {
@@ -38,6 +40,13 @@ export const commands = {
 	getDownloadedVersions: () => __TAURI_INVOKE<string[]>("get_downloaded_versions"),
 };
 
+/** Events */
+export const events = {
+	consoleMessageEvent: makeEvent<pomme_launcher$commands.ConsoleMessageEvent>("console-message-event"),
+	downloadProgressEvent: makeEvent<pomme_launcher$downloader.DownloadProgressEvent>("download-progress-event"),
+	gameExitedEvent: makeEvent<pomme_launcher$commands.GameExitedEvent>("game-exited-event"),
+};
+
 /* Tauri Specta runtime */
 export type Result<T, E> =
   | { ok: true;  value: T }
@@ -63,3 +72,19 @@ export async function typedError<T, E>(promise: Promise<T>): Promise<Result<T, E
 }
 
 const _assertTypedErrorFollowsContract: <T, E>(result: Promise<T>) => Promise<any> = typedError;
+
+function makeEvent<T>(name: string) {
+    const base = {
+        listen: (cb: __TAURI_EVENT.EventCallback<T>) => __TAURI_EVENT.listen(name, cb),
+        once: (cb: __TAURI_EVENT.EventCallback<T>) => __TAURI_EVENT.once(name, cb),
+        emit: ((payload: T) => __TAURI_EVENT.emit(name, payload) as unknown) as (T extends null ? () => Promise<void> : (payload: T) => Promise<void>)
+    };
+
+    const fn = (target: import("@tauri-apps/api/webview").Webview | import("@tauri-apps/api/window").Window) => ({
+        listen: (cb: __TAURI_EVENT.EventCallback<T>) => target.listen(name, cb),
+        once: (cb: __TAURI_EVENT.EventCallback<T>) => target.once(name, cb),
+        emit: ((payload: T) => target.emit(name, payload) as unknown) as (T extends null ? () => Promise<void> : (payload: T) => Promise<void>)
+    });
+
+    return Object.assign(fn, base);
+}

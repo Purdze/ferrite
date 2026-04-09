@@ -4,8 +4,9 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
+    "generate-bindings": "cd src-tauri && cargo test --lib generate_bindings",
     "dev": "vite",
-    "build": "tsc && vite build",
+    "build": "pnpm run generate-bindings && tsc && vite build",
     "preview": "vite preview",
     "tauri": "tauri",
     "lint": "eslint src/",

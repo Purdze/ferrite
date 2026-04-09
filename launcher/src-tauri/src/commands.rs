@@ -8,7 +8,8 @@ use std::collections::VecDeque;
 use std::os::unix::process::ExitStatusExt;
 use std::process::Stdio;
 use std::sync::Arc;
-use tauri::{AppHandle, Emitter, Manager, State, WebviewUrl, WebviewWindowBuilder};
+use tauri::{AppHandle, Manager, State, WebviewUrl, WebviewWindowBuilder};
+use tauri_specta::Event;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::sync::Mutex;
 
@@ -55,20 +56,11 @@ pub struct PatchNote {
 const PATCH_NOTES_URL: &str = "https://launchercontent.mojang.com/v2/javaPatchNotes.json";
 const IMAGE_BASE: &str = "https://launchercontent.mojang.com";
 
-#[derive(Clone, Serialize)]
-enum ConsoleEventType {
-    #[serde(rename = "message")]
-    Message,
-    #[serde(rename = "reset")]
+#[derive(Clone, Serialize, specta::Type, tauri_specta::Event)]
+#[serde(tag = "type", rename_all = "lowercase")]
+pub enum ConsoleMessageEvent {
+    Message { val: String },
     Reset,
-}
-
-#[derive(Clone, Serialize)]
-struct ConsoleEvent {
-    #[serde(rename = "type")]
-    pub message_type: ConsoleEventType,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub val: Option<String>,
 }
 
 #[tauri::command]
@@ -215,6 +207,13 @@ pub struct GameVersion {
     pub version_type: String,
 }
 
+#[derive(Clone, Serialize, specta::Type, tauri_specta::Event)]
+pub struct GameExitedEvent {
+    pub code: Option<i32>,
+    pub signal: Option<i32>,
+    pub last_line: Option<String>,
+}
+
 static VERSION_CACHE: std::sync::OnceLock<Versions> = std::sync::OnceLock::new();
 
 pub async fn fetch_versions() -> Result<&'static Versions, String> {
@@ -319,15 +318,7 @@ pub async fn launch_game(
                     .unwrap();
             }
             Some(window) => {
-                let _ = app
-                    .emit(
-                        "console_message",
-                        ConsoleEvent {
-                            message_type: ConsoleEventType::Reset,
-                            val: None,
-                        },
-                    )
-                    .map_err(|e| e.to_string());
+                let _ = ConsoleMessageEvent::Reset.emit(&app);
                 window.set_focus().expect("failed to focus window");
             }
         }
@@ -391,18 +382,12 @@ pub async fn launch_game(
         }
     });
 
-    let app_emitter = app.clone();
     let app_handle = app.clone();
     let last_error_writer = last_error_line.clone();
     tokio::spawn(async move {
         while let Some(line) = rx.recv().await {
-            let _ = app_emitter.emit(
-                "console_message",
-                ConsoleEvent {
-                    message_type: ConsoleEventType::Message,
-                    val: Some(line.clone()),
-                },
-            );
+            let _ = ConsoleMessageEvent::Message { val: line.clone() }.emit(&app_handle);
+
             let state = app_handle.state::<AppState>();
             let mut logs = state.client_logs.lock().await;
             logs.push_back(line.clone());
@@ -415,7 +400,6 @@ pub async fn launch_game(
         }
     });
 
-    let app_handle = app.clone();
     tokio::spawn(async move {
         let status = child
             .wait()
@@ -430,14 +414,12 @@ pub async fn launch_game(
             #[cfg(not(unix))]
             let signal: Option<i32> = None;
 
-            let _ = app_handle.emit(
-                "game_exited",
-                serde_json::json!({
-                    "code": status.code(),
-                    "signal": signal,
-                    "last_line": last,
-                }),
-            );
+            let _ = GameExitedEvent {
+                code: status.code(),
+                signal,
+                last_line: last,
+            }
+            .emit(&app);
         }
 
         println!("client status was: {}", status);

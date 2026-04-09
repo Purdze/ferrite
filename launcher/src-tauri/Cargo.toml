@@ -30,5 +30,5 @@ thiserror = "2.0"
 tauri-plugin-opener = "2"
 
 specta = "=2.0.0-rc.24"
-tauri-specta = { version = "=2.0.0-rc.24", features = ["typescript"] }
+tauri-specta = { version = "=2.0.0-rc.24", features = ["derive", "typescript"] }
 specta-typescript = "0.0.11"
