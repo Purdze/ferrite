@@ -34,10 +34,8 @@ pub enum InstallationError {
     NameTooLong(usize),
     #[error("Invalid path")]
     InvalidPath,
-    #[cfg(target_os = "windows")]
     #[error("Invalid character in directory: {0}")]
     InvalidCharacter(char),
-    #[cfg(target_os = "windows")]
     #[error("Reserved name: {0}")]
     ReservedName(String),
     #[error("Directory already exists")]

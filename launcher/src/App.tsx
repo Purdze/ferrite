@@ -2,20 +2,14 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useCallback, useEffect, useRef } from "react";
+import { commands } from "./bindings.ts";
 import Navbar from "./components/Navbar";
 import Titlebar from "./components/Titlebar";
 import AlertDialog from "./components/dialogs/AlertDialog.tsx";
 import { ConfirmDialog } from "./components/dialogs/ConfirmDialog.tsx";
 import { InstallationDialog } from "./components/dialogs/InstallationDialog.tsx";
 import { useAppStateContext } from "./lib/state";
-import {
-  AuthAccount,
-  DownloadProgress,
-  GameVersion,
-  Installation,
-  InstallationError,
-  PatchNote,
-} from "./lib/types";
+import { AuthAccount, DownloadProgress, GameVersion, PatchNote } from "./lib/types";
 import FriendsPage from "./pages/Friends";
 import Homepage from "./pages/Home";
 import InstallationsPage from "./pages/Installations";
@@ -46,10 +40,6 @@ function App() {
     openedDialog,
     setOpenedDialog,
     launcherSettings,
-    invokeCreateInstallation,
-    invokeDeleteInstallation,
-    invokeDuplicateInstallation,
-    invokeEditInstallation,
     activeInstall,
     setActiveInstall,
     setInstallations,
@@ -261,73 +251,21 @@ function App() {
 
   const dialogDragStartedInside = useRef(false);
 
-  const createInstallation = async (
-    payload: Installation,
-  ): Promise<[Installation, null] | [null, InstallationError]> => {
-    try {
-      const inst = await invokeCreateInstallation(payload);
-      setInstallations((prev) => [...prev, inst]);
-      return [inst, null];
-    } catch (e) {
-      console.error("Failed to create installation", e);
-      return [null, e as InstallationError];
-    }
-  };
-
-  const deleteInstallation = async (install_id: string): Promise<null | InstallationError> => {
-    try {
-      await invokeDeleteInstallation(install_id);
-      setInstallations((prev) => prev.filter((inst) => inst.id !== install_id));
-      return null;
-    } catch (e) {
-      console.error("Failed to delete installation", e);
-      return e as InstallationError;
-    }
-  };
-
-  const duplicateInstallation = async (
-    install_id: string,
-    new_payload: Installation,
-  ): Promise<[Installation, null] | [null, InstallationError]> => {
-    try {
-      const inst = await invokeDuplicateInstallation(install_id, new_payload);
-      setInstallations((prev) => [...prev, inst]);
-      return [inst, null];
-    } catch (e) {
-      console.error("Failed to duplicate installation", e);
-      return [null, e as InstallationError];
-    }
-  };
-
-  const editInstallation = async (
-    install_id: string,
-    new_payload: Installation,
-  ): Promise<null | InstallationError> => {
-    try {
-      const inst = await invokeEditInstallation(install_id, new_payload);
-      setInstallations((prev) => prev.map((i) => (i.id === install_id ? inst : i)));
-      return null;
-    } catch (e) {
-      console.error("Failed to edit installation", e);
-      return e as InstallationError;
-    }
-  };
-
   useEffect(() => {
-    invoke<Installation[]>("load_installations")
-      .then((installs) => {
-        setInstallations(installs);
-        setActiveInstall((prev) => prev ?? installs[0]);
-      })
-      .catch((e) => setStatus("Failed to load installations: " + e));
+    commands.loadInstallations().then((res) => {
+      if (res.status === "ok") {
+        setInstallations(res.data);
+        setActiveInstall((prev) => prev ?? res.data[0]);
+      } else {
+        setStatus("Failed to load installations: " + res.error);
+      }
+    });
   }, [setInstallations, setActiveInstall, setStatus]);
 
   useEffect(() => {
-    invoke<string[]>("get_downloaded_versions")
-      .then((versions) => {
-        setDownloadedVersions((prev) => new Set([...prev, ...versions]));
-      })
-      .catch((e) => console.error("Failed to load downloaded versions: " + e));
+    commands.getDownloadedVersions().then((versions) => {
+      setDownloadedVersions((prev) => new Set([...prev, ...versions]));
+    });
   }, [setDownloadedVersions, setStatus]);
 
   return (
@@ -347,11 +285,7 @@ function App() {
           )}
 
           {page === "installations" && (
-            <InstallationsPage
-              deleteInstallation={deleteInstallation}
-              handleLaunch={handleLaunch}
-              ensureAssets={ensureAssets}
-            />
+            <InstallationsPage handleLaunch={handleLaunch} ensureAssets={ensureAssets} />
           )}
 
           {page === "news" && <NewsPage openPatchNote={openPatchNote} />}
@@ -378,14 +312,7 @@ function App() {
             }
           }}
         >
-          {openedDialog.name === "installation" && (
-            <InstallationDialog
-              {...openedDialog.props}
-              createInstallation={createInstallation}
-              duplicateInstallation={duplicateInstallation}
-              editInstallation={editInstallation}
-            />
-          )}
+          {openedDialog.name === "installation" && <InstallationDialog {...openedDialog.props} />}
           {openedDialog.name === "confirm_dialog" && <ConfirmDialog {...openedDialog.props} />}
           {openedDialog.name === "alert_dialog" && <AlertDialog {...openedDialog.props} />}
         </div>

@@ -67,7 +67,7 @@ export type InstallationDraft = {
 	height: number,
 };
 
-export type InstallationError = { kind: "InvalidName" } | { kind: "NameTooLong"; detail: number } | { kind: "InvalidPath" } | { kind: "DirectoryAlreadyExists" } | { kind: "InstallNotFound"; detail: Id } | { kind: "Io"; detail: string } | { kind: "Json"; detail: string } | { kind: "Other"; detail: string };
+export type InstallationError = { kind: "InvalidName" } | { kind: "NameTooLong"; detail: number } | { kind: "InvalidPath" } | { kind: "InvalidCharacter"; detail: string } | { kind: "ReservedName"; detail: string } | { kind: "DirectoryAlreadyExists" } | { kind: "InstallNotFound"; detail: Id } | { kind: "Io"; detail: string } | { kind: "Json"; detail: string } | { kind: "Other"; detail: string };
 
 export type LauncherSettings = {
 	language: string,
