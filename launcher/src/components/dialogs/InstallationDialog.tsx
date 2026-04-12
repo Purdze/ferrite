@@ -40,7 +40,6 @@ function mapInstallationError(error: InstallationError): { name?: string; dir?: 
 export function InstallationDialog({ ...dialogProps }: InstallationDialogProps) {
   const {
     versions,
-    installations,
     setInstallations,
     setActiveInstall,
     setPage,

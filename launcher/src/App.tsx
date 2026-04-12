@@ -170,7 +170,7 @@ function App() {
       setDownloadedVersions((prev) => new Set([...prev, version]));
       return null;
     },
-    [downloadedVersions, setDownloadedVersions, setLaunchingStatus, setStatus],
+    [setDownloadedVersions],
   );
 
   const handleLaunch: handleLaunchType = useCallback(
@@ -306,9 +306,7 @@ function App() {
             <Homepage handleLaunch={handleLaunch} openPatchNote={openPatchNote} />
           )}
 
-          {page === "installations" && (
-            <InstallationsPage handleLaunch={handleLaunch} ensureAssets={ensureAssets} />
-          )}
+          {page === "installations" && <InstallationsPage handleLaunch={handleLaunch} />}
 
           {page === "news" && <NewsPage openPatchNote={openPatchNote} />}
 

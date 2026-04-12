@@ -17,10 +17,9 @@ import type { handleLaunchType } from "../lib/types";
 
 interface InstallationsPageProps {
   handleLaunch: handleLaunchType;
-  ensureAssets: (version: string) => Promise<Error | null>;
 }
 
-export default function InstallationsPage({ handleLaunch, ensureAssets }: InstallationsPageProps) {
+export default function InstallationsPage({ handleLaunch }: InstallationsPageProps) {
   const {
     activeInstall,
     setActiveInstall,
