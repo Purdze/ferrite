@@ -122,3 +122,11 @@ GPL-3.0-or-later. This project is not affiliated with Mojang or Microsoft.
 
 [![Discord](https://img.shields.io/discord/1483578136544280618?color=5865F2&label=Discord&logo=discord&logoColor=white)](https://discord.gg/ucBA55bHPR)
 [![Sponsor](https://img.shields.io/badge/Sponsor-Purdze-ea4aaa?logo=githubsponsors&logoColor=white)](https://github.com/sponsors/Purdze)
+
+<a href="https://www.star-history.com/?repos=PommeMC%2FPomme-Client&type=date&logscale&legend=top-left">
+ <picture>
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=PommeMC/Pomme-Client&type=date&theme=dark&logscale&legend=top-left" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=PommeMC/Pomme-Client&type=date&logscale&legend=top-left" />
+   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=PommeMC/Pomme-Client&type=date&logscale&legend=top-left" />
+ </picture>
+</a>
