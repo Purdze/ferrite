@@ -1,6 +1,8 @@
-import { AlertDialogProps } from "../components/dialogs/AlertDialog.tsx";
-import { ConfirmDialogProps } from "../components/dialogs/ConfirmDialog.tsx";
-import { InstallationDialogProps } from "../components/dialogs/InstallationDialog.tsx";
+import { Installation } from "../bindings/pomme_launcher/installations";
+import { AlertDialogProps } from "../components/dialogs/AlertDialog";
+import { ConfirmDialogProps } from "../components/dialogs/ConfirmDialog";
+import { InstallationDialogProps } from "../components/dialogs/InstallationDialog";
+import { ServerDialogProps } from "../components/dialogs/ServerDialog";
 
 export type Page = "home" | "installations" | "servers" | "friends" | "mods" | "news" | "settings";
 
@@ -8,7 +10,8 @@ export type LaunchingStatus = null | "checking_assets" | "launching" | "installi
 
 // dialog_name: typeof props
 type DialogMap = {
-  installation: InstallationDialogProps;
+  installation_dialog: InstallationDialogProps;
+  server_dialog: ServerDialogProps;
   confirm_dialog: ConfirmDialogProps;
   alert_dialog: AlertDialogProps;
 };
@@ -39,3 +42,9 @@ export interface Server {
   motd: string;
   version: string;
 }
+
+export type handleLaunchType = (options?: {
+  serverIp?: string;
+  serverVersion?: string;
+  install?: Installation;
+}) => Promise<void>;

@@ -2,10 +2,10 @@ import { open as openNativeDialog } from "@tauri-apps/plugin-dialog";
 import { useState } from "react";
 import { HiChevronDown, HiFolder } from "react-icons/hi2";
 import { commands } from "../../bindings";
-import { Installation, InstallationError } from "../../bindings/pomme_launcher/installations.ts";
-import { isAbsolutePath, normalizeDirectoryName } from "../../lib/helpers.ts";
-import { useDropdown } from "../../lib/hooks.ts";
-import { useAppStateContext } from "../../lib/state.ts";
+import { Installation, InstallationError } from "../../bindings/pomme_launcher/installations";
+import { isAbsolutePath, normalizeDirectoryName } from "../../lib/helpers";
+import { useDropdown } from "../../lib/hooks";
+import { useAppStateContext } from "../../lib/state";
 
 export type InstallationDialogProps =
   | { type: "new" }
@@ -40,6 +40,8 @@ function mapInstallationError(error: InstallationError): { name?: string; dir?: 
 export function InstallationDialog({ ...dialogProps }: InstallationDialogProps) {
   const {
     versions,
+    installations,
+    setInstallations,
     setActiveInstall,
     setPage,
     setVersions,
@@ -265,6 +267,8 @@ export function InstallationDialog({ ...dialogProps }: InstallationDialogProps) 
                 return;
               }
               const install = installResult.value;
+              setInstallations((prev) => [...prev, install]);
+              setActiveInstall(install);
 
               setActiveInstall(install);
 
@@ -292,6 +296,9 @@ export function InstallationDialog({ ...dialogProps }: InstallationDialogProps) 
                 if (mapped.dir) setDirError(mapped.dir);
                 return;
               }
+              setInstallations((prev) =>
+                prev.map((i) => (i.id === editingInstall.id ? editedInstall : i)),
+              );
               setActiveInstall(editedInstall);
               setOpenedDialog(null);
             }

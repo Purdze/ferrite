@@ -4,7 +4,7 @@ export type ConsoleMessageEvent = { type: "message"; val: string } | { type: "re
 export type GameExitedEvent = {
 	code: number | null,
 	signal: number | null,
-	last_line: string | null,
+	last_lines: string[] | null,
 };
 
 export type GameVersion = {

@@ -11,12 +11,13 @@ import {
   HiTrash,
 } from "react-icons/hi2";
 import { commands } from "../bindings";
-import { formatRelativeDate } from "../lib/helpers.ts";
+import { formatRelativeDate } from "../lib/helpers";
 import { useAppStateContext } from "../lib/state";
+import type { handleLaunchType } from "../lib/types";
 
 interface InstallationsPageProps {
-  handleLaunch: () => Promise<void>;
-  ensureAssets: (version: string) => Promise<boolean>;
+  handleLaunch: handleLaunchType;
+  ensureAssets: (version: string) => Promise<Error | null>;
 }
 
 export default function InstallationsPage({ handleLaunch, ensureAssets }: InstallationsPageProps) {
@@ -41,11 +42,11 @@ export default function InstallationsPage({ handleLaunch, ensureAssets }: Instal
   return (
     <div className="page installs-page">
       <div className="installs-header">
-        <h2 className="installs-heading">INSTALLATIONS</h2>
+        <h2 className="page-heading">INSTALLATIONS</h2>
         <button
           className="installs-new-btn"
           onClick={() => {
-            setOpenedDialog({ name: "installation", props: { type: "new" } });
+            setOpenedDialog({ name: "installation_dialog", props: { type: "new" } });
           }}
         >
           <HiPlus /> New Installation
@@ -71,29 +72,24 @@ export default function InstallationsPage({ handleLaunch, ensureAssets }: Instal
             <span className="install-card-played">
               {inst.last_played ? formatRelativeDate(inst.last_played) : "Never"}
             </span>
-            {downloadedVersions.has(inst.version) ? (
-              <button
-                className="install-play-btn"
-                onClick={() => {
-                  setActiveInstall(inst);
-                  setPage("home");
-                  handleLaunch();
-                }}
-              >
-                <HiPlay /> Play
-              </button>
-            ) : (
-              <button
-                className="install-download-btn"
-                onClick={() => {
-                  setActiveInstall(inst);
-                  setPage("home");
-                  ensureAssets(inst.version);
-                }}
-              >
-                <BiSolidDownload /> Install
-              </button>
-            )}
+            <button
+              className="install-play-btn"
+              onClick={() => {
+                setActiveInstall(inst);
+                setPage("home");
+                handleLaunch({ install: inst });
+              }}
+            >
+              {downloadedVersions.has(inst.version) ? (
+                <>
+                  <HiPlay /> Play
+                </>
+              ) : (
+                <>
+                  <BiSolidDownload /> Install
+                </>
+              )}
+            </button>
             <button
               className="install-folder-btn"
               onClick={async () => {
@@ -107,7 +103,7 @@ export default function InstallationsPage({ handleLaunch, ensureAssets }: Instal
                 className="install-action-btn"
                 onClick={() => {
                   setOpenedDialog({
-                    name: "installation",
+                    name: "installation_dialog",
                     props: { type: "edit", installation: { ...inst } },
                   });
                 }}
@@ -128,7 +124,7 @@ export default function InstallationsPage({ handleLaunch, ensureAssets }: Instal
                     is_latest: false,
                   };
                   setOpenedDialog({
-                    name: "installation",
+                    name: "installation_dialog",
                     props: { type: "dupl", installation: dup, original_id: inst.id },
                   });
                 }}

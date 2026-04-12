@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useAppStateContext } from "../../lib/state.ts";
+import { useAppStateContext } from "../../lib/state";
 
 export type AlertDialogProps = {
   title: string;

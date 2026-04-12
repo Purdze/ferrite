@@ -1,5 +1,5 @@
-import { useAppStateContext } from "../../lib/state.ts";
 import { useState } from "react";
+import { useAppStateContext } from "../../lib/state";
 
 export type ConfirmDialogProps = {
   title: string;

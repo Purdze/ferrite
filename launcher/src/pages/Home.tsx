@@ -4,9 +4,10 @@ import { PatchNote } from "../bindings/pomme_launcher/commands";
 import SkinRunner from "../components/SkinRunner";
 import { useDropdown } from "../lib/hooks";
 import { useAppStateContext } from "../lib/state";
+import { handleLaunchType } from "../lib/types";
 
 interface HomepageProps {
-  handleLaunch: () => Promise<void>;
+  handleLaunch: handleLaunchType;
   openPatchNote: (item: PatchNote) => Promise<void>;
 }
 
@@ -45,7 +46,7 @@ export default function Homepage({ handleLaunch, openPatchNote }: HomepageProps)
                 ? "launching"
                 : ""
           }`}
-          onClick={handleLaunch}
+          onClick={() => handleLaunch()}
           disabled={launchingStatus !== null}
         >
           {launchingStatus === null && downloadedVersions.has(activeInstall?.version ?? "") ? (
@@ -88,7 +89,7 @@ export default function Homepage({ handleLaunch, openPatchNote }: HomepageProps)
                   className={`version-item`}
                   onClick={() => {
                     versionDropdown.close();
-                    setOpenedDialog({ name: "installation", props: { type: "new" } });
+                    setOpenedDialog({ name: "installation_dialog", props: { type: "new" } });
                   }}
                 >
                   <span className="version-item-id">Create a new installation</span>
@@ -144,12 +145,19 @@ export default function Homepage({ handleLaunch, openPatchNote }: HomepageProps)
         <div className="news-grid">
           {news.slice(0, 3).map((item) => (
             <div className="news-card" key={item.version} onClick={() => openPatchNote(item)}>
-              <div className="news-card-img" style={{ backgroundImage: `url(${item.image_url})` }}>
+              <div className="news-card-img">
+                <img src={item.image_url} alt={item.title} className="news-card-img-bg" />
                 <span className="news-type-badge">{item.entry_type}</span>
               </div>
+
               <div className="news-card-body">
-                <span className="news-date">{item.date.replace(/-/g, ".")}</span>
+                <div className="news-card-meta">
+                  <span className="news-date">{item.date.replace(/-/g, ".")}</span>
+                  <span className="news-card-arrow">→</span>
+                </div>
+
                 <h3 className="news-title">{item.title}</h3>
+                <hr className="news-rule" />
                 <p className="news-desc">{item.summary}</p>
               </div>
             </div>

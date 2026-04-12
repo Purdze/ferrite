@@ -7,11 +7,9 @@ use std::collections::VecDeque;
 #[cfg(unix)]
 use std::os::unix::process::ExitStatusExt;
 use std::process::Stdio;
-use std::sync::Arc;
 use tauri::{AppHandle, Manager, State, WebviewUrl, WebviewWindowBuilder};
 use tauri_specta::Event;
 use tokio::io::{AsyncBufReadExt, BufReader};
-use tokio::sync::Mutex;
 
 #[derive(Deserialize)]
 struct MojangPatchNotes {
@@ -211,7 +209,7 @@ pub struct GameVersion {
 pub struct GameExitedEvent {
     pub code: Option<i32>,
     pub signal: Option<i32>,
-    pub last_line: Option<String>,
+    pub last_lines: Option<Vec<String>>,
 }
 
 static VERSION_CACHE: std::sync::OnceLock<Versions> = std::sync::OnceLock::new();
@@ -283,11 +281,11 @@ pub async fn get_downloaded_versions() -> Vec<String> {
 #[specta::specta]
 pub async fn launch_game(
     app: AppHandle,
-    version: String,
+    install_id: String,
     uuid: Option<String>,
-    server: Option<String>,
+    server_ip: Option<String>,
+    override_version: Option<String>,
     debug_enabled: Option<bool>,
-    install_path: Option<String>,
 ) -> Result<String, String> {
     let exe = find_client_binary()?;
     let account = uuid.as_deref().and_then(crate::auth::try_restore);
@@ -302,6 +300,11 @@ pub async fn launch_game(
     let token_path = std::env::temp_dir().join("pomme_launch_token");
     std::fs::write(&token_path, &token).map_err(|e| e.to_string())?;
 
+    let install = installations::registry::find_by_id(&installations::Id::from(install_id))
+        .map_err(|e| e.to_string())?;
+    let version = override_version.unwrap_or_else(|| install.version.into());
+    let install_path: String = install.directory.into();
+
     let mut cmd = tokio::process::Command::new(&exe);
     cmd.stdout(Stdio::piped());
     cmd.stderr(Stdio::piped());
@@ -309,6 +312,7 @@ pub async fn launch_game(
     if debug_enabled.unwrap_or(false) {
         cmd.env("RUST_LOG", "debug");
         cmd.env("RUST_BACKTRACE", "full");
+
         match app.webview_windows().get("console") {
             None => {
                 WebviewWindowBuilder::new(&app, "console", WebviewUrl::App("console".into()))
@@ -319,7 +323,7 @@ pub async fn launch_game(
             }
             Some(window) => {
                 let _ = ConsoleMessageEvent::Reset.emit(&app);
-                window.set_focus().expect("failed to focus window");
+                let _ = window.set_focus();
             }
         }
     }
@@ -335,12 +339,7 @@ pub async fn launch_game(
         .arg("--launch-token")
         .arg(token_path.to_string_lossy().as_ref())
         .arg("--game-dir")
-        .arg(install_path.unwrap_or_else(|| {
-            storage::installations_dir()
-                .join("default")
-                .to_string_lossy()
-                .into_owned()
-        }));
+        .arg(install_path);
 
     if let Some(acc) = &account {
         cmd.arg("--uuid")
@@ -348,12 +347,9 @@ pub async fn launch_game(
             .arg("--access-token")
             .arg(&acc.access_token);
     }
-    if let Some(server) = &server {
-        cmd.arg("--quick-access-server").arg(server);
+    if let Some(server_ip) = &server_ip {
+        cmd.arg("--quick-access-server").arg(server_ip);
     }
-
-    #[cfg(debug_assertions)]
-    cmd.arg("--dev");
 
     #[cfg(unix)]
     cmd.process_group(0);
@@ -363,29 +359,33 @@ pub async fn launch_game(
     let stdout = child.stdout.take().expect("couldn't take stdout");
     let stderr = child.stderr.take().expect("couldn't take stderr");
 
-    let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<String>();
+    let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<(bool, String)>();
     let tx2 = tx.clone();
-
-    let last_error_line = Arc::new(Mutex::new(None::<String>));
 
     tokio::spawn(async move {
         let mut reader = BufReader::new(stdout).lines();
         while let Ok(Some(line)) = reader.next_line().await {
-            let _ = tx.send(line);
+            let _ = tx.send((false, line));
         }
     });
 
     tokio::spawn(async move {
         let mut reader = BufReader::new(stderr).lines();
         while let Ok(Some(line)) = reader.next_line().await {
-            let _ = tx2.send(line);
+            let _ = tx2.send((true, line));
         }
     });
 
+    let (result_tx, result_rx) = tokio::sync::oneshot::channel::<Option<Vec<String>>>();
     let app_handle = app.clone();
-    let last_error_writer = last_error_line.clone();
+
     tokio::spawn(async move {
-        while let Some(line) = rx.recv().await {
+        const MAX_LINES: usize = 50;
+
+        let mut stderr_lines: VecDeque<String> = VecDeque::new();
+        let mut tracing_errors: VecDeque<String> = VecDeque::new();
+
+        while let Some((is_stderr, line)) = rx.recv().await {
             let _ = ConsoleMessageEvent::Message { val: line.clone() }.emit(&app_handle);
 
             let state = app_handle.state::<AppState>();
@@ -394,10 +394,31 @@ pub async fn launch_game(
             if logs.len() > 10_000 {
                 logs.pop_front();
             }
-            if line.contains(" ERROR ") {
-                *last_error_writer.lock().await = Some(line);
+
+            let target = if is_stderr {
+                Some(&mut stderr_lines)
+            } else if line.contains(" ERROR ") {
+                Some(&mut tracing_errors)
+            } else {
+                None
+            };
+            if let Some(buf) = target {
+                if buf.len() >= MAX_LINES {
+                    buf.pop_front();
+                }
+                buf.push_back(line.clone());
             }
         }
+
+        let mut combined: Vec<String> = stderr_lines.into();
+        combined.extend(tracing_errors);
+
+        let result = if combined.is_empty() {
+            None
+        } else {
+            Some(combined)
+        };
+        let _ = result_tx.send(result);
     });
 
     tokio::spawn(async move {
@@ -406,9 +427,9 @@ pub async fn launch_game(
             .await
             .expect("client process encountered an error");
 
-        if !status.success() {
-            let last = last_error_line.lock().await.clone();
+        let last = result_rx.await.unwrap_or(None);
 
+        if !status.success() {
             #[cfg(unix)]
             let signal = status.signal();
             #[cfg(not(unix))]
@@ -417,7 +438,7 @@ pub async fn launch_game(
             let _ = GameExitedEvent {
                 code: status.code(),
                 signal,
-                last_line: last,
+                last_lines: last,
             }
             .emit(&app);
         }
@@ -453,7 +474,13 @@ fn find_client_binary() -> Result<std::path::PathBuf, String> {
             if !ancestor.pop() {
                 break;
             }
-            for profile in ["release", "debug"] {
+
+            #[cfg(debug_assertions)]
+            let profiles = ["debug", "release"];
+            #[cfg(not(debug_assertions))]
+            let profiles = ["release", "debug"];
+
+            for profile in profiles {
                 let candidate = ancestor.join("target").join(profile).join(EXENAME);
                 if candidate.exists() {
                     return Ok(candidate);

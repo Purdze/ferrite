@@ -1,10 +1,10 @@
 import { createContext, createElement, ReactNode, useContext, useEffect, useState } from "react";
-import { commands } from "../bindings/index.ts";
-import { AuthAccount } from "../bindings/pomme_launcher/auth.ts";
-import { GameVersion, PatchNote } from "../bindings/pomme_launcher/commands.ts";
-import { LauncherSettings } from "../bindings/pomme_launcher/settings.ts";
+import { commands } from "../bindings";
+import { AuthAccount } from "../bindings/pomme_launcher/auth";
+import { GameVersion, PatchNote } from "../bindings/pomme_launcher/commands";
+import { LauncherSettings } from "../bindings/pomme_launcher/settings";
 import { useDropdown } from "./hooks";
-import { useInstallations } from "./installations.ts";
+import { useInstallations } from "./installations";
 import { useServers } from "./servers";
 import { DownloadProgress, LaunchingStatus, OpenedDialog, Page } from "./types";
 
@@ -62,8 +62,6 @@ const useAppState = () => {
   const [activeIndex, setActiveIndex] = useState(0);
   const accountDropdown = useDropdown();
 
-  const [server, setServer] = useState("");
-
   const [modView, setModView] = useState<"list" | "grid">("list");
   const [modSearch, setModSearch] = useState("");
   const [modFilter, setModFilter] = useState("all");
@@ -82,6 +80,8 @@ const useAppState = () => {
     title: string;
     body: string;
     image_url: string;
+    entry_type: string;
+    date: string;
   } | null>(null);
 
   return {
@@ -93,8 +93,6 @@ const useAppState = () => {
     setAccounts,
     activeIndex,
     setActiveIndex,
-    server,
-    setServer,
     modView,
     setModView,
     modSearch,

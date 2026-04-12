@@ -18,12 +18,17 @@ use clap::Parser;
 use net::connection::ConnectArgs;
 use std::sync::Arc;
 
-const SUPPORTED_VERSIONS: [&str; 3] = ["26.1", "26.1.1-rc-1", "26.1.1"];
+/// Maps all supported versions to their protocol version.
+/// Snapshots encode as `(1 << 30) | base_protocol`.
+/// KEEP IN SYNC WITH launcher/src-tauri/src/lib.rs
+const VERSION_PROTOCOL_MAP: [(&str, i32); 3] =
+    [("26.1", 775), ("26.1.1-rc-1", 0x40000130), ("26.1.1", 775)];
 
 fn main() {
     let args = args::LaunchArgs::parse();
 
-    if !cfg!(debug_assertions) && !args.dev {
+    #[cfg(not(debug_assertions))]
+    {
         match &args.launch_token {
             Some(path) => {
                 let token_path = std::path::Path::new(path);
@@ -44,16 +49,19 @@ fn main() {
     let version = args
         .version
         .as_deref()
-        .unwrap_or_else(|| SUPPORTED_VERSIONS.first().unwrap());
+        .unwrap_or_else(|| VERSION_PROTOCOL_MAP.last().unwrap().0);
 
-    if !SUPPORTED_VERSIONS.contains(&version) {
+    if !VERSION_PROTOCOL_MAP.iter().any(|(v, _)| v == &version) {
         eprintln!(
-            "{version} is not currently supported. Supported versions: {:#?}",
-            SUPPORTED_VERSIONS
+            "{version} is not currently supported. Supported versions: {}",
+            VERSION_PROTOCOL_MAP
+                .iter()
+                .map(|(v, _)| *v)
+                .collect::<Vec<_>>()
+                .join(", ")
         );
-        if !cfg!(debug_assertions) && !args.dev {
-            std::process::exit(1);
-        }
+        #[cfg(not(debug_assertions))]
+        std::process::exit(1);
     }
 
     let data_dirs = dirs::DataDirs::resolve(
