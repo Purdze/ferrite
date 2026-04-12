@@ -525,10 +525,12 @@ body {
 
 .content {
   flex: 1;
-  overflow-y: auto;
 }
 
 .page {
+  flex: 1;
+  overflow-y: auto;
+
   height: 100%;
   animation: fade-in 0.3s ease;
 }
@@ -547,7 +549,7 @@ body {
 /* ═══ Home Page ═══ */
 
 .home-page {
-  padding: 16px 20px 32px;
+  padding: 16px 20px 22px;
   display: flex;
   flex-direction: column;
   gap: 16px;
