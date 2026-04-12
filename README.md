@@ -8,27 +8,48 @@
 
 ---
 
-Pomme is a from-scratch Minecraft: Java Edition client built entirely in Rust. It connects to vanilla servers, renders the world through Vulkan, and handles physics, networking, and UI without any Mojang code. The goal is a lightweight, performant alternative to the official Java client.
+Pomme is a from-scratch Minecraft: Java Edition client built entirely in Rust.
+It connects to vanilla servers, renders the world through Vulkan,
+and handles physics, networking, and UI without any Mojang code.
+The goal is a lightweight, performant alternative to the official Java client.
 
-<img width="957" height="535" alt="launcher" src="https://github.com/user-attachments/assets/5d7240d3-80fb-49fb-9eb4-7e497f61a603" />
+<p align="center">
+    TODO: REPLACE WITH NEW
+</p>
 
 ## Features
 
-- **Vulkan rendering** -chunk meshing, frustum culling, water/lava, sky, block overlays, hand animation
-- **Vanilla-exact physics** -sprinting, swimming, drowning, collision, all matched against decompiled source
-- **Full protocol support** -connects to 26.1 servers via azalea-protocol, handles chunk streaming, block updates, chat
-- **Microsoft authentication** -sign in with your Microsoft account, tokens stored in the OS keyring
-- **HUD & menus** -health, hunger, air bubbles, hotbar, F3 debug, chat, pause menu, options, server list
-- **Launcher** -Tauri-based launcher with frosted glass UI, multi-account management, Mojang patch notes, installation manager
+- **Vulkan rendering**
+-chunk meshing, frustum culling, water/lava, sky, block overlays, hand animation
+
+- **Vanilla-exact physics**
+-sprinting, swimming, drowning, collision, all matched against decompiled source
+
+- **Full protocol support**
+-connects to 26.1 servers via azalea-protocol, handles chunk streaming,
+block updates, chat
+
+- **Microsoft authentication**
+-sign in with your Microsoft account, tokens stored in the OS keyring
+
+- **HUD & menus**
+-health, hunger, air bubbles, hotbar, F3 debug, chat, pause menu,
+options, server list
+
+- **Launcher**
+-Tauri-based launcher with frosted glass UI, multi-account management,
+Mojang patch notes, installation manager
 
 ## Architecture
 
-```
+```text
 pomme/             Minecraft client (Rust, Vulkan)
 launcher/         Launcher app (Tauri, React, TypeScript)
 ```
 
-The client is a standalone binary that receives launch arguments from the launcher. The launcher handles authentication, asset downloading, version management, and spawns the client with the appropriate flags.
+The client is a standalone binary that receives launch arguments from
+the launcher. The launcher handles authentication, asset downloading,
+version management, and spawns the client with the appropriate flags.
 
 ## Building
 
@@ -53,18 +74,45 @@ pnpm tauri build
 ## Running
 
 **Via the launcher** (recommended):
+
 ```bash
 cd launcher && pnpm tauri dev
 ```
 
 **Standalone client**:
-```bash
-cargo run --release -- --dev --server localhost:25565 --username Steve
-```
+Running the standalone client requires assets, for which you have 2 options:
+
+1. Run the launcher and install the latest release. Then you can do:
+
+   ```bash
+   cargo run -- --username Steve --quick-access-server localhost
+   ```
+
+2. Download the assets yourself and extract them into `reference/assets/`:
+
+   ```bash
+   mkdir -p reference/assets/indexes 
+   mkdir -p reference/assets/objects
+   mkdir -p reference/versions/26.1.1/extracted
+   mkdir -p reference/game-dir
+   
+    # 30 is the asset index id for 26.1.1
+   cp ~/.minecraft/assets/indexes/30.json reference/assets/indexes/26.1.1.json
+   cp -r ~/.minecraft/assets/objects/. reference/assets/objects/
+   cp ~/.minecraft/versions/26.1.1/26.1.1.jar reference/versions/26.1.1/
+   unzip reference/versions/26.1.1/26.1.1.jar 'assets/*' -d reference/versions/26.1.1/extracted/
+   
+   cargo run -- --username Steve --quick-access-server localhost \
+     --version 26.1.1 \
+     --assets-dir $PWD/reference/assets \
+     --versions-dir $PWD/reference/versions \
+     --game-dir $PWD/reference/game-dir
+   ```
 
 ## Contributing
 
-Contributions are welcome. Please open an issue first to discuss what you'd like to change.
+Contributions are welcome.
+Please open an issue first to discuss what you'd like to change.
 
 ## License
 
