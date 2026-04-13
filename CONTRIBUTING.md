@@ -8,8 +8,8 @@ Thanks for your interest in contributing to Pomme!
 2. Clone your fork and set up the development environment:
 
    ```bash
-   git clone https://github.com/<your-username>/Pomme-Client.git
-   cd Pomme-Client
+   git clone https://github.com/<your-username>/Pomme.git
+   cd Pomme
    ```
 
 3. Build and run:
@@ -81,26 +81,39 @@ For bug fixes, also include:
 
 ## Project Structure
 
-```text
-src/
-├── main.rs          # Entry point
-├── args.rs          # CLI arguments
-├── entity/          # Entity storage (item drops)
-├── window/          # winit event loop, input handling
-├── renderer/        # Vulkan rendering, chunk meshing, texture atlas
-│   ├── pipelines/   # GPU pipelines (chunk, sky, hand, overlay, etc.)
-│   ├── shaders/     # GLSL shaders
-│   └── chunk/       # Chunk buffer management, meshing, atlas
-├── net/             # Server connection, packet handling
-├── world/           # Chunk storage, block registry, models
-├── physics/         # Movement, collision
-├── player/          # Local player, inventory, interaction
-└── ui/              # HUD, chat, menus, pause screen
+```bash
+Pomme/
+├── pomme-client        # Minecraft client (Vulkan, Rust)
+└── pomme-launcher      # Launcher app (Tauri, React, TypeScript)
+```
 
-launcher/
-├── src/             # React frontend (TypeScript)
-├── src-tauri/       # Tauri backend (Rust)
-└── package.json     # Node dependencies
+### Pomme client
+
+```bash
+pomme-client/
+└── src/
+    ├── main.rs             # Entry point
+    ├── args.rs             # CLI arguments
+    ├── entity/             # Entity storage (item drops)
+    ├── window/             # winit event loop, input handling
+    ├── renderer/           # Vulkan rendering, chunk meshing, texture atlas
+    │   ├── pipelines/      # GPU pipelines (chunk, sky, hand, overlay, etc.)
+    │   ├── shaders/        # GLSL shaders
+    │   └── chunk/          # Chunk buffer management, meshing, atlas
+    ├── net/                # Server connection, packet handling
+    ├── world/              # Chunk storage, block registry, models
+    ├── physics/            # Movement, collision
+    ├── player/             # Local player, inventory, interaction
+    └── ui/                 # HUD, chat, menus, pause screen
+```
+
+### Pomme launcher
+
+```bash
+pomme-launcher/
+├── src/                # React frontend (TypeScript)
+├── src-tauri/          # Tauri backend (Rust)
+└── package.json        # Node dependencies
 ```
 
 ## Reporting Issues
