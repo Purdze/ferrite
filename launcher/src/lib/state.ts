@@ -67,8 +67,6 @@ const useAppState = () => {
   const [activeIndex, setActiveIndex] = useState(0);
   const accountDropdown = useDropdown();
 
-  const [server, setServer] = useState("");
-
   const [modView, setModView] = useState<"list" | "grid">("list");
   const [modSearch, setModSearch] = useState("");
   const [modFilter, setModFilter] = useState("all");
@@ -100,8 +98,6 @@ const useAppState = () => {
     setAccounts,
     activeIndex,
     setActiveIndex,
-    server,
-    setServer,
     modView,
     setModView,
     modSearch,
