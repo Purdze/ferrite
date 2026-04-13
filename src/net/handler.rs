@@ -70,7 +70,7 @@ pub fn handle_game_packet(
                     pos: p.change.pos,
                     look_direction: p.change.look_direction,
                     flags: azalea_protocol::common::movements::MoveFlags {
-                        on_ground: false,
+                        on_ground: true,
                         horizontal_collision: false,
                     },
                 },
