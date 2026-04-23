@@ -11,7 +11,8 @@
     "lint": "eslint src/",
     "format": "prettier --write src/",
     "format:check": "prettier --check src/",
-    "generate-bindings": "cd src-tauri && cargo run --bin generate-bindings"
+    "generate-bindings": "cd src-tauri && cargo run --bin generate-bindings",
+    "pre-pr": "pnpm run format:check && pnpm run lint && tsc --noEmit"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
