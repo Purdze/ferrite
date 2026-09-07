@@ -584,15 +584,16 @@ pub fn push_slider(
     fs: f32,
     label: &str,
     value: f32,
+    enabled: bool,
     dragging: bool,
     scroll: &LabelScroll<'_>,
 ) -> SliderResult {
-    let hovered = hit_test(cursor, [x, y, w, h]);
+    let hovered = enabled && hit_test(cursor, [x, y, w, h]);
     let handle_w = 8.0 * gs;
     let track_w = w - handle_w;
     let handle_x = x + value.clamp(0.0, 1.0) * track_w;
 
-    let actively_dragging = dragging && mouse_held;
+    let actively_dragging = enabled && dragging && mouse_held;
     let start_drag = hovered && mouse_held && !dragging;
 
     let new_value = if actively_dragging || start_drag {
@@ -602,13 +603,12 @@ pub fn push_slider(
         None
     };
 
-    let track_sprite = SpriteId::SliderTrack;
     elements.push(MenuElement::NineSlice {
         x,
         y,
         w,
         h,
-        sprite: track_sprite,
+        sprite: SpriteId::SliderTrack,
         border: BTN_BORDER * gs,
         tint: WHITE,
     });
@@ -627,7 +627,8 @@ pub fn push_slider(
         tint: WHITE,
     });
 
-    push_widget_label(elements, x, y, w, h, gs, fs, label, WHITE, Some(scroll));
+    let text_col = if enabled { WHITE } else { COL_DISABLED };
+    push_widget_label(elements, x, y, w, h, gs, fs, label, text_col, Some(scroll));
 
     SliderResult {
         hovered,
